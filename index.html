@@ -1406,6 +1406,21 @@ dialog[open] img{animation:imageIn .7s cubic-bezier(.16,1,.3,1)}
 }
 </style>
 
+<style id="mobile-mascot-fix">
+/* телефон/планшет: маскот не перекрывает поиск и кнопки */
+@media(max-width:760px){
+  .hero-study-art{top:62px;bottom:auto;right:14px;left:auto;width:auto;grid-row:auto;z-index:0}
+  .mascot-card{width:80px;height:80px;border-radius:20px}
+  .mascot-card::before{width:52px;height:52px;top:-16px;right:-12px}
+  .mascot-card::after{font-size:13px;left:8px;bottom:5px}
+  .mascot{width:68px;height:68px;left:6px;top:11px}
+  .hero .sub{max-width:calc(100% - 104px)}
+}
+@media(max-width:560px){
+  main{padding-top:58px}
+  .hero-study-art{top:136px}
+}
+</style>
 </head>
 <body>
 <button class="theme-toggle" id="themeToggle" type="button" aria-label="Переключить тему" title="Переключить тему"><span class="toggle-knob">☀️</span></button>
