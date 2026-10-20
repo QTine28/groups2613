@@ -1535,30 +1535,27 @@ const P = {
 const subjects = [
   {short:"PostgreSQL | ДМБС", full:"Администрирование баз данных", teacher:"Жайлеубай Әлібек Нұрланұлы",
    lessons:[["Понедельник",3],["Вторник",3],["Среда",3],["Четверг",1],["Пятница",3]],
-   tg:"https://t.me/+WzxSx6r-YWZhZjRi", dm:"zhayleubay", alias:"alibek alibek zhayleubay sql бд база данных",
+   tg:"https://t.me/+WzxSx6r-YWZhZjRi", dm:"https://t.me/zhayleubay", alias:"alibek alibek zhayleubay sql бд база данных",
    zm:"https://us04web.zoom.us/j/3610768311?pwd=UlJ1TFQrVTdZSUFSZ3QzZGFNejMvZz09",
    gd:"https://drive.google.com/drive/folders/1nBA-gH3N6wRggFY3GunczG-v237o1TdX"},
   {short:"Python | АБСП", full:"Составление алгоритма и создание блок-схемы на основе спецификации программного обеспечения", teacher:"Баймаканов Арсен Тимурович",
    lessons:[["Понедельник",1],["Понедельник",2],["Вторник",1],["Вторник",2],["Среда",1],["Четверг",3]],
-   tg:"https://t.me/+opdU_CsJltw1YTIy", dm:"nothingtosayZ1", alias:"arsen baimakanov алгоритм блок схема",
+   tg:"https://t.me/+opdU_CsJltw1YTIy", dm:"https://t.me/nothingtosayZ1", alias:"arsen baimakanov алгоритм блок схема",
    zm:"https://us04web.zoom.us/j/77607280374?pwd=gbxO4QJi2nuzUY4qmzNI1tvUcf4jiM.1"},
   {short:"C# | ИКТ", full:"Применение информационно-коммуникационных и цифровых технологий", teacher:"Ахмадиева Арай Кайратовна",
    lessons:[["Среда",2],["Четверг",2],["Пятница",2]],
-   tg:"https://t.me/+TomUHNOncNZkMTcy", dm:"Araika_001", alias:"arai akhmadieva ахмадиева ikt инфо",
+   tg:"https://t.me/+TomUHNOncNZkMTcy", dm:"https://t.me/Araika_001", alias:"arai akhmadieva ахмадиева ikt инфо",
    zm:"https://us05web.zoom.us/j/85155007548?pwd=itshJzEEKsiHceHMmdaYByOHbVGeZO.1"},
   {short:"Физкультура", full:"Развитие и совершенствование физических качеств", teacher:"Жұмағамбетова Әсел Құсманқызы",
-   lessons:[["Понедельник",0],["Пятница",0]],
-   tg:"https://t.me/+7iRu53oo8VMxNzZi", alias:"asel fizra физра спорт зал"},
-  {short:"Экономика", full:"Применение базовых знаний экономики и основ предпринимательства", teacher:"Кымбат Книязова", alias:"kymbat kumbat экон бизнес",
+   lessons:[], schedule:"Асинхронное", tg:"https://t.me/+7iRu53oo8VMxNzZi", dm:"https://t.me/+77788484654", alias:"asel fizra физра спорт зал"},
+  {short:"Экономика", full:"Применение базовых знаний экономики и основ предпринимательства", teacher:"Князова Қымбат Жалғасбайқызы", alias:"kymbat kumbat экон бизнес",
    lessons:[["Пятница",1]],
-   wa:"https://chat.whatsapp.com/BgKXx7GIdQdKsWVfEH01l2",
+   wa:"https://chat.whatsapp.com/BgKXx7GIdQdKsWVfEH01l2", contactWa:"https://wa.me/77052369782",
    zm:"https://us04web.zoom.us/j/71394766828?pwd=8fLBaNOYDFLFFtZjdcHpjW0vdQmJlc.1"},
-  {short:"Английский язык", full:"Английский язык", teacher:"Мухамеджанқызы Мерей Абдигапбарова", alias:"мерей merey мухамеджанкызы абдигапбарова abdigapbarova англ english",
-   lessons:[["Четверг","13:30"]],
-   wa:"https://chat.whatsapp.com/EmklgtLFqZt7lNjsmeBIHl"},
-  {short:"Высшая математика", full:"Высшая математика", teacher:"Базикова Карлыгаш Манаповна", alias:"karlygash bazikova математика матем",
-   lessons:[],
-   wa:"https://chat.whatsapp.com/K2BZBrBDvYlFjjROXa4A9u?s=sw&p=a&mlu=4&ilr=4"}
+  {short:"Английский язык", full:"Ф1-Английский язык", elective:true, details:["Подготовка к IELTS на 4.5–5","Уровень: pre-inter, inter"], teacher:"Мухамеджанқызы Мерей Абдигапбарова", alias:"мерей merey мухамеджанкызы абдигапбарова abdigapbarova англ english IELTS",
+   lessons:[["Четверг","13:30"]], wa:"https://chat.whatsapp.com/EmklgtLFqZt7lNjsmeBIHl", contactWa:"https://wa.me/77053637116"},
+  {short:"Вычислительная математика", full:"Ф1-Вычислительная математика", elective:true, teacher:"Базикова Карлыгаш Манаповна", alias:"karlygash bazikova математика матем",
+   lessons:[], schedule:"Асинхронное", wa:"https://chat.whatsapp.com/K2BZBrBDvYlFjjROXa4A9u?s=sw&p=a&mlu=4&ilr=4", contactWa:"https://wa.me/77015384769"}
 ];
 const ic=d=>`<svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${d}"/></svg>`;
 const ICON={
@@ -1569,7 +1566,7 @@ const ICON={
  zm:ic("M4 6h10a2 2 0 0 1 2 2v2.5l5.2-3.6a.5.5 0 0 1 .8.4v9.4a.5.5 0 0 1-.8.4L16 13.5V16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"),
  dm:ic("M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z")
 };
-const EMOJI={"PostgreSQL | ДМБС":"🐘","Python | АБСП":"🐍","C# | ИКТ":"💻","Физкультура":"🏃","Экономика":"📈","Английский язык":"🇬🇧","Высшая математика":"➗"};
+const EMOJI={"PostgreSQL | ДМБС":"🐘","Python | АБСП":"🐍","C# | ИКТ":"💻","Физкультура":"🏃","Экономика":"📈","Английский язык":`<svg width="22" height="14" viewBox="0 0 60 30" aria-hidden="true" style="vertical-align:-2px;border-radius:2px"><rect width="60" height="30" fill="#012169"/><path d="M0 0 60 30M60 0 0 30" stroke="#fff" stroke-width="6"/><path d="M0 0 60 30M60 0 0 30" stroke="#c8102e" stroke-width="2"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#c8102e" stroke-width="5"/></svg>`,"Вычислительная математика":"➗"};
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const list = document.getElementById("list");
 const NMAP={"ә":"а","і":"и","ұ":"у","ү":"у","қ":"к","ғ":"г","ң":"н","ө":"о","һ":"х","ё":"е"};
@@ -1579,26 +1576,27 @@ const btn=(cls,href,icon,text)=>`<a class="${cls}" href="${esc(href)}" target="_
 const subjectCard=s=>card([s.short,s.full,s.teacher,s.dm,s.alias].filter(Boolean).join(" "), `${EMOJI[s.short]||"📘"} ${esc(s.short)}`, `
 <dl>
   <div><dt>👤 Преподаватель</dt><dd>${s.teacher?esc(s.teacher):'<span class="none">не указан</span>'}</dd></div>
-  <div><dt>📖 Полное название предмета</dt><dd>${esc(s.full)}</dd></div>
-  <div><dt>🕒 Расписание</dt><dd>${s.lessons.length?`<ul class="sched">${s.lessons.map(l=>`<li><span>${l[0]}</span>${typeof l[1]==="string"?"урок начинается в "+l[1]:P[l[1]]}</li>`).join("")}</ul>`:'<span class="none">не указано</span>'}</dd></div>
+  <div><dt>📖 ${s.elective?"Факультативный предмет":"Полное название предмета"}</dt><dd>${esc(s.full)}${s.details?`<ul class="sched">${s.details.map(x=>`<li><strong>${esc(x)}</strong></li>`).join("")}</ul>`:""}</dd></div>
+  <div><dt>🕒 Расписание</dt><dd>${s.schedule?esc(s.schedule):s.lessons.length?`<ul class="sched">${s.lessons.map(l=>`<li><span>${l[0]}</span>${typeof l[1]==="string"?l[1]:P[l[1]]}</li>`).join("")}</ul>`:'<span class="none">не указано</span>'}</dd></div>
 </dl>
 <div class="links">
   ${s.tg?btn("tg",s.tg,ICON.tg,"Telegram · чат"):""}
   ${s.wa?btn("wa",s.wa,ICON.wa,"WhatsApp · чат"):""}
+  ${s.contactWa?btn("wa",s.contactWa,ICON.wa,"Написать WhatsApp"):""}
   ${s.zm?btn("zm",s.zm,ICON.zm,"Zoom"):""}
   ${s.dc?btn("dc",s.dc,ICON.dc,"Discord"):""}
   ${s.gd?btn("gd",s.gd,ICON.gd,"Google Drive"):""}
-  ${s.dm?btn("dm","https://t.me/"+s.dm,ICON.dm,"Написать @"+esc(s.dm)):""}
+  ${s.dm?btn("dm",s.dm,ICON.tg,"Написать Telegram"):""}
   ${!s.tg&&!s.wa&&!s.dm&&!s.gd&&!s.dc&&!s.zm?'<span class="none">Ссылка на группу пока не добавлена</span>':""}
 </div>`);
 const people=[
   {role:"🎓 Куратор", name:"Назира", phone:"+7 775 522 1017", tel:"+77755221017", wa:"https://wa.me/77755221017"},
-  {role:"🧑‍💼 Староста", name:"Жапарова Хадиджа", phone:"+7 747 150 1930", tel:"+77471501930", wa:"https://wa.me/77471501930", tg:"Rekarrrhg"}
+  {role:"🧑‍💼 Староста", name:"Жапарова Хадиджа", phone:"+7 747 150 1930", tel:"+77471501930", wa:"https://wa.me/77471501930", tg:"https://t.me/Rekarrrhg"}
 ];
 document.getElementById("conbody").innerHTML=people.map(x=>`<div class="person">
     <div class="role">${x.role}</div><div class="pname">${esc(x.name)}</div>
-    <a class="ph" href="tel:${x.tel}">${esc(x.phone)}</a>
-    <div class="links">${btn("wa",x.wa,ICON.wa,"WhatsApp")}${x.tg?btn("dm","https://t.me/"+x.tg,ICON.tg,"@"+esc(x.tg)):""}</div>
+    ${x.phone?`<a class="ph" href="tel:${x.tel}">${esc(x.phone)}</a>`:""}
+    <div class="links">${x.wa?btn("wa",x.wa,ICON.wa,"Написать WhatsApp"):""}${x.tg?btn("dm",x.tg,ICON.tg,"Написать Telegram"):""}</div>
   </div>`).join("");
 list.innerHTML = subjects.map(subjectCard).join("");
 
