@@ -2,6 +2,17 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
+<script>
+  // t.me/SuperRasulBot/chess?startapp=room_ID (or new_5-0) opens this page from GitHub: games with a friend live on the bot's server
+  (function () {
+    var ONLINE = 'https://141-147-45-18.sslip.io/';
+    var m = (location.search + '&' + location.hash).match(/tgWebAppStartParam=([\w-]+)/);
+    if (!m || location.href.indexOf(ONLINE) === 0) return;
+    var p = m[1];
+    if (/^room_[0-9a-f]{8}$/.test(p)) location.replace(ONLINE + '?room=' + p.slice(5) + location.hash);
+    else if (/^new_(0|\d+-\d+)$/.test(p)) location.replace(ONLINE + '?new=' + encodeURIComponent(p.slice(4).replace('-', '+')) + location.hash);
+  })();
+</script>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Шахматы</title>
 <style>
