@@ -2,6 +2,18 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
+  <script>
+    // this page is the bot's main Mini App, so startapp links for chess land here too: send them on
+    (function () {
+      var m = (location.search + '&' + location.hash).match(/tgWebAppStartParam=([\w-]+)/);
+      var online = 'https://141-147-45-18.sslip.io/'; // chess with a friend runs on the bot's server
+      if (!m) return;
+      var p = m[1];
+      if (p === 'chess') location.replace('../chess/' + location.hash);
+      else if (/^room_[0-9a-f]{8}$/.test(p)) location.replace(online + '?room=' + p.slice(5) + location.hash);
+      else if (/^new_(0|\d+-\d+)$/.test(p)) location.replace(online + '?new=' + encodeURIComponent(p.slice(4).replace('-', '+')) + location.hash);
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b12">
   <meta name="description" content="Plants vs. Zombies GOTY в браузере и Telegram. Игра загружается автоматически, прогресс хранится на устройстве.">
