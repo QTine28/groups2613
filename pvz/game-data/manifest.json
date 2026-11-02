@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "revision": "fbf36db9e7a6de612a09dfffcb5cc29502143efecccd2a91e09ee131db3da325",
+  "archiveBytes": 33462322,
+  "archiveSha256": "fbf36db9e7a6de612a09dfffcb5cc29502143efecccd2a91e09ee131db3da325",
+  "chunks": [
+    {
+      "url": "part-000.bin",
+      "bytes": 8388608,
+      "sha256": "ed6c09b564f8888177c92833bb0fc8bba58f8d0a91453f33b419acbea087cf2f"
+    },
+    {
+      "url": "part-001.bin",
+      "bytes": 8388608,
+      "sha256": "f2d41d4550241b38565deb5ce9cc359173735466b513a09766a4e6c4ffe8011f"
+    },
+    {
+      "url": "part-002.bin",
+      "bytes": 8388608,
+      "sha256": "14afb51a4375c7812833835aff55c9b39cbd5b0a8c36b500cd92dc5c7e1dece8"
+    },
+    {
+      "url": "part-003.bin",
+      "bytes": 8296498,
+      "sha256": "3417f52b2feb368238ea5d88fd1cc90e96f31603397d0726f9e5d388aff7299a"
+    }
+  ]
+}

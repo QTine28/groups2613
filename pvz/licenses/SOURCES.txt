@@ -1,0 +1,63 @@
+PvZ-Portable 0.2.6
+Copyright (C) 2026 Zhou Qiankang and contributors.
+License: LGPL-3.0-or-later. See PvZ-Portable-LICENSE.txt and PvZ-Portable-COPYING.txt.
+Source: https://github.com/wszqkzqk/PvZ-Portable/tree/396f1c7fcf0507dcd1b79dc1ffad139eea2fb6ca
+Source archive: https://github.com/wszqkzqk/PvZ-Portable/archive/396f1c7fcf0507dcd1b79dc1ffad139eea2fb6ca.tar.gz
+Proportional Hor+ mobile scene patch: 2026-11-02.
+The engine JS and WASM were rebuilt from the pinned source with a native
+600-unit-high camera whose width follows the landscape drawing-buffer aspect.
+The WebGL projection uses equal X/Y pixel scale; original sprites and text keep
+their proportions. Existing panorama art is revealed beyond the original frame.
+Native scene changes anchor selector groups and the board menu, extend backdrop
+edges, and adapt Tree of Wisdom scenery while retaining original board rules.
+The bank and shovel remain above the original nine-column lawn. Decorative
+margins do not accept planting input. Portrait uses the original 4:3 view.
+Rendering goes directly to WebGL, without a cropped screenshot compositor.
+Input is queued through the native event pump. SDL swap-triggered Asyncify sleeps
+are disabled and modal-safe resize prevents competing suspended stacks.
+The HTML shell, responsive viewport and Telegram integration are modified locally.
+Complete modified engine source: licenses/pvz-mobile-source.zip (relative to site root).
+Build instructions: third_party/pvz-portable/mobile/README.md inside that archive.
+Build scripts: tools/apply_mobile_engine.py, tools/apply_wide_*.py, and tools/build_mobile_engine.py.
+Compiler: Emscripten 4.0.23, SDK aaa43392544d695232b70eda706d751f18980c2a.
+Engine source archive SHA-256:
+f120be5a53d946b90b05316629c0a21bb0e3f0b1a319ae3566a9553a337647d6
+Engine JS SHA-256:
+de9a1065022ed2d0e66391034496b81ee4d2d4477805fa38bdbbc6d167da6723
+Engine WASM SHA-256:
+8ad6389c90d58aee77a29cafb6ccc161820718e85a43b874d77ca664afa34092
+Original upstream release archive SHA-256 (before mobile modifications):
+04dd660d39a6087168648e15b39b16e54d8e94442b6fc7472a649e026138d86d
+
+libopenmpt 0.8.4
+Copyright OpenMPT contributors. BSD license and dependency notices retained in source.
+Source: https://github.com/OpenMPT/openmpt/tree/327204eaa2c27bd1acbb571babe68f279c85238b
+Source archive: licenses/libopenmpt-0.8.4-source.zip (relative to site root).
+Static WebAssembly build includes miniz, minimp3 and stb_vorbis.
+The exact CMake source list/configuration is included in the modified engine archive.
+Source archive SHA-256:
+c086a8d165cc819eb2ba4950ab37e1b3d676a30dc2891fed02a8a9ba067b20ac
+
+JSZip 3.10.1
+Source: https://github.com/Stuk/jszip/tree/v3.10.1
+License: MIT or GPLv3. This distribution uses the MIT option (JSZip.txt).
+Bundled minified JS SHA-256: acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e
+
+SexyAppFramework and bundled audio libraries retain their upstream notices.
+The corresponding engine source includes all further third-party notices.
+
+Plants vs. Zombies GOTY resource package
+The user explicitly requested bundled resources on 2026-11-02.
+The hosted distribution includes chunked game data derived from the supplied
+Windows GOTY 1.2.0.1096 installation: main.pak, properties/, and the generated
+pvz-portable.xml compatibility override. The original installation is unchanged.
+Original game resources: Copyright PopCap Games / Electronic Arts.
+The engine's LGPL license and JSZip's MIT license do not apply to those resources.
+Source main.pak SHA-256:
+5878326408285cb01f83b4fa4edcc66d65e727f6d6ee88563b5b3b287dd259fc
+Prepared compressed resource download: approximately 33.5 MB.
+Manifest: game-data/manifest.json (schema version 1, four chunks of at most 8 MiB).
+Prepared archive SHA-256 / revision:
+fbf36db9e7a6de612a09dfffcb5cc29502143efecccd2a91e09ee131db3da325
+Resources download automatically and are cached by revision in the browser.
+Player saves are not bundled or uploaded; they remain in local browser storage.
