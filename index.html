@@ -5,9 +5,14 @@
 <script>
   // t.me/SuperRasulBot?startapp=chess opens this page as the bot's main Mini App: jump to the requested game
   (function () {
-    var m = (location.search + '&' + location.hash).match(/tgWebAppStartParam=([a-z]+)/);
+    var m = (location.search + '&' + location.hash).match(/tgWebAppStartParam=([\w-]+)/);
     var games = { pvz: 'pvz/', chess: 'chess/' };
-    if (m && games[m[1]]) location.replace(games[m[1]] + location.hash);
+    var online = 'https://141-147-45-18.sslip.io/'; // chess with a friend runs on the bot's server
+    if (!m) return;
+    var p = m[1];
+    if (games[p]) location.replace(games[p] + location.hash);
+    else if (/^room_[0-9a-f]{8}$/.test(p)) location.replace(online + '?room=' + p.slice(5) + location.hash);
+    else if (/^new_(0|\d+-\d+)$/.test(p)) location.replace(online + '?new=' + encodeURIComponent(p.slice(4).replace('-', '+')) + location.hash);
   })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
