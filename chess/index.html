@@ -162,6 +162,12 @@
     <div class="seg" data-k="tc"><button data-v="0" class="on">Без часов</button><button data-v="3+2">3+2</button><button data-v="5+0">5+0</button><button data-v="10+0">10+0</button><button data-v="15+10">15+10</button></div></div>
   <button class="primary" id="startBtn" style="width:100%;margin-top:6px">Играть</button>
 </dialog>
+<dialog id="gameDlg">
+  <h2>Шахматы</h2>
+  <button class="primary" id="vsBotBtn" style="width:100%;margin-bottom:10px">🤖 С ботом</button>
+  <button class="primary" id="vsFriendBtn" style="width:100%">👥 С другом</button>
+  <p style="font-size:13px;color:#888;margin:12px 0 0">С другом: соперник нажимает «Играть» на том же сообщении в чате, остальные — смотрят.</p>
+</dialog>
 
 </dialog>
 
@@ -1192,7 +1198,13 @@ function startOnline() {
   document.head.appendChild(s);
 }
 
-if (ONLINE) startOnline();
+if (ONLINE && GAME_MSG) { // the game message in a group: one «Играть» button, the choice is made here
+  const gd = $('gameDlg');
+  gd.addEventListener('cancel', e => e.preventDefault()); // Esc must not leave an empty page
+  $('vsFriendBtn').onclick = () => { gd.close(); startOnline(); };
+  $('vsBotBtn').onclick = () => { gd.close(); ONLINE = null; newGame(); dlg.showModal(); };
+  newGame(); gd.showModal();
+} else if (ONLINE) startOnline();
 else {
   newGame(); dlg.showModal();
   if (/tgWebApp/.test(location.hash)) { // opened as a Telegram Mini App (e.g. from GitHub Pages): use the full height
