@@ -2,6 +2,14 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
+<script>
+  // t.me/SuperRasulBot?startapp=chess opens this page as the bot's main Mini App: jump to the requested game
+  (function () {
+    var m = (location.search + '&' + location.hash).match(/tgWebAppStartParam=([a-z]+)/);
+    var games = { pvz: 'pvz/', chess: 'chess/' };
+    if (m && games[m[1]]) location.replace(games[m[1]] + location.hash);
+  })();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Предметы и преподаватели</title>
 <style>
