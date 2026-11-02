@@ -1070,12 +1070,15 @@ $('startBtn').onclick = () => { dlg.close(); newGame(); };
 // index.html?new=5+0 creates the game first (the bot only sends this link), then becomes ?room=ID.
 const PARAMS = new URLSearchParams(location.search);
 let ONLINE = PARAMS.get('room') || (PARAMS.has('new') ? 'new' : null);
+// opened from a Telegram Game message in a group: that message is the room, the opponent just presses «Играть» on it
+const GAME_MSG = PARAMS.has('sig');
 const uci = m => sqName(m.from) + sqName(m.to) + (m.promo || '');
 let tg = null, lastState = null;
 function authQuery() {
   const q = new URLSearchParams({ room: ONLINE });
   if (tg && tg.initData) q.set('init', tg.initData);
   const dev = new URLSearchParams(location.search).get('dev'); if (dev) q.set('dev', dev);
+  for (const k of ['uid', 'name', 'ts', 'sig']) if (PARAMS.has(k)) q.set(k, PARAMS.get(k)); // link signed by the bot (Telegram Game)
   return q;
 }
 function api(what, extra) {
@@ -1117,12 +1120,12 @@ function syncState(st) {
   G.over = st.over; G.clock = st.clock; lastTick = performance.now();
   if (G.over && !wasOver) sfx(G.over.mate ? 'mate' : 'end');
   G.waiting = !st.players.w || !st.players.b;
-  G.status = !G.human ? 'Вы зритель' : G.waiting ? 'Ждём соперника… Нажми «Пригласить друга»'
+  G.status = !G.human ? 'Вы зритель' : G.waiting ? (GAME_MSG ? 'Ждём соперника… Пусть он нажмёт «Играть» на том же сообщении в чате' : 'Ждём соперника… Нажми «Пригласить друга»')
     : G.over ? (st.rematch.length ? (st.rematch.includes(G.human) ? 'Ждём ответа на реванш…' : 'Соперник предлагает реванш') : '')
     : G.S.turn === G.human ? 'Ваш ход' : 'Ход соперника';
   renderChat(st.chat || []);
   $('chatForm').style.display = G.human ? '' : 'none';
-  const canInvite = G.waiting && G.human && st.invite;
+  const canInvite = G.waiting && G.human && st.invite && !GAME_MSG;
   $('newBtn').textContent = canInvite ? 'Пригласить друга' : 'Реванш';
   $('newBtn').style.visibility = canInvite || G.over && G.human ? '' : 'hidden';
   render();
