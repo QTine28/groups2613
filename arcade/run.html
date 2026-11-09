@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Такопи-бег</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;700;800;900&display=swap">
+<link rel="stylesheet" href="game.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+<a class="back" href="index.html">← игры</a>
+<canvas id="game"></canvas>
+<script src="engine.js"></script>
+<script>
+const ID = "run", GROUND = 540, PX = 84;
+let state = "title", overT = 0, score = 0, best = getBest(ID), nextMilestone = 500;
+let speed, p, obs, cookies, spawn, scroll = 0, clock = 0;
+
+// фон генерируется один раз: звёзды и два слоя города
+const stars = Array.from({ length: 70 }, () => ({ x: Math.random() * W, y: Math.random() * 300, r: Math.random() * 1.4 + 0.4, ph: Math.random() * 6 }));
+function makeCity(n, minH, maxH, wMin, wMax) {
+  let x = 0;
+  return Array.from({ length: n }, () => {
+    const w = wMin + Math.random() * (wMax - wMin), h = minH + Math.random() * (maxH - minH);
+    const b = { x, w, h, lights: [] };
+    for (let wy = 14; wy < h - 14; wy += 18) for (let wx = 8; wx < w - 12; wx += 14)
+      if (Math.random() < 0.35) b.lights.push([wx, wy, Math.random() < 0.15]);
+    x += w + 6 + Math.random() * 10;
+    return b;
+  });
+}
+const cityFar = makeCity(14, 90, 210, 40, 70), cityNear = makeCity(10, 140, 260, 60, 100);
+const cityLen = arr => arr[arr.length - 1].x + arr[arr.length - 1].w + 14;
+
+function start() {
+  state = "play"; score = 0; speed = 330; spawn = 0.9; nextMilestone = 500;
+  p = { y: GROUND, vy: 0, jumps: 0, squash: 0, spin: 0 };
+  obs = []; cookies = [];
+  Sound.start();
+}
+function jump() {
+  if (state === "title" || (state === "over" && overT > 0.7)) return start();
+  if (state !== "play" || p.jumps >= 2) return;
+  if (p.jumps === 0) { p.vy = -820; Sound.jump(); burst(PX, GROUND, 8, ["#c9b6ff", "#ffffff"], { speed: 90, gravity: 200, size: 3 }); }
+  else { p.vy = -700; p.spin = 1; Sound.jump2(); burst(PX, p.y - 20, 10, [COLORS.pinkL, COLORS.white], { speed: 120, size: 3 }); }
+  p.jumps++;
+}
+on("down", jump);
+on("key", c => { if (c === "Space" || c === "ArrowUp" || c === "KeyW") jump(); });
+
+function die() {
+  state = "over"; overT = 0; best = saveBest(ID, Math.floor(score));
+  shake(1); Sound.hurt(); setTimeout(() => Sound.lose(), 250);
+  burst(PX, p.y - 24, 30, [COLORS.pink, COLORS.pinkL, COLORS.yellow], { speed: 260 });
+}
+
+const game = {
+  start,
+  update(dt) {
+    clock += dt;
+    if (state !== "play") { overT += dt; scroll += 40 * dt; if (state === "over") { p.vy += 1800 * dt; p.y = Math.min(GROUND + 80, p.y + p.vy * dt); } return; }
+    speed = Math.min(760, speed + 12 * dt);
+    scroll += speed * dt;
+    score += speed * dt / 30;
+    if (score >= nextMilestone) { Sound.power(); floatText(nextMilestone + "!", W / 2, 150, COLORS.yellow, 34); nextMilestone += 500; }
+
+    p.vy += 2200 * dt; p.y += p.vy * dt;
+    p.spin = Math.max(0, p.spin - dt * 2.2);
+    if (p.y >= GROUND) {
+      if (p.jumps) { p.squash = 1; burst(PX, GROUND, 6, ["#c9b6ff", "#ffffff"], { speed: 80, gravity: 150, size: 2.5 }); }
+      p.y = GROUND; p.vy = 0; p.jumps = 0;
+    }
+    p.squash = Math.max(0, p.squash - dt * 6);
+    // пыль из-под щупалец на бегу
+    if (p.jumps === 0 && Math.random() < dt * 14) particles.push({ x: PX - 14, y: GROUND - 2, vx: -speed * 0.3, vy: -30 * Math.random(), t: 0, life: 0.35, s: 3, c: "rgba(220,210,255,0.7)", g: 0 });
+
+    spawn -= dt;
+    if (spawn <= 0) {
+      const k = Math.random();
+      if (k < 0.4) obs.push({ type: "cone", x: W + 30, y: GROUND - 42, w: 30, h: 42 });
+      else if (k < 0.75) obs.push({ type: "crate", x: W + 30, y: GROUND - 46, w: 46, h: 46 });
+      else obs.push({ type: "bird", x: W + 30, y: GROUND - 92, w: 44, h: 26, ph: Math.random() * 6 });
+      if (Math.random() < 0.65) {
+        const n = 1 + Math.floor(Math.random() * 3), cy = GROUND - 120 - Math.random() * 90;
+        for (let i = 0; i < n; i++) cookies.push({ x: W + 110 + i * 36, y: cy - Math.sin(i / Math.max(1, n - 1) * Math.PI) * 24, w: 26, h: 26 });
+      }
+      spawn = (0.75 + Math.random() * 0.8) * Math.max(0.55, 330 / speed);
+    }
+    for (const o of obs) o.x -= speed * dt * (o.type === "bird" ? 1.22 : 1);
+    for (const c of cookies) c.x -= speed * dt;
+    obs = obs.filter(o => o.x > -80); cookies = cookies.filter(c => c.x > -40);
+
+    const me = { x: PX - 16, y: p.y - 44, w: 32, h: 40 };
+    for (const o of obs) {
+      const box = o.type === "cone" ? { x: o.x + 6, y: o.y + 8, w: o.w - 12, h: o.h - 8 } : { x: o.x + 3, y: o.y + 3, w: o.w - 6, h: o.h - 6 };
+      if (hit(me, box)) return die();
+    }
+    cookies = cookies.filter(c => {
+      if (!hit(me, { x: c.x - 13, y: c.y - 13, w: 26, h: 26 })) return true;
+      score += 10; Sound.coin(); floatText("+10", c.x, c.y - 10);
+      burst(c.x, c.y, 10, [COLORS.yellow, COLORS.orange, "#fff3c4"], { speed: 140, size: 3 });
+      return false;
+    });
+  },
+  draw(t) {
+    // небо
+    ctx.fillStyle = vgrad(0, GROUND, ["#120f33", "#2b1f5e", "#6b3a85", "#d36a9b"]);
+    ctx.fillRect(0, 0, W, H);
+    stars.forEach(s => { ctx.globalAlpha = 0.5 + Math.sin(t * 2 + s.ph) * 0.4; circle(s.x, s.y, s.r, COLORS.white); });
+    ctx.globalAlpha = 1;
+    // луна со свечением
+    const glow = ctx.createRadialGradient(280, 110, 10, 280, 110, 90);
+    glow.addColorStop(0, "rgba(255,240,200,0.45)"); glow.addColorStop(1, "rgba(255,240,200,0)");
+    ctx.fillStyle = glow; ctx.fillRect(180, 10, 200, 200);
+    circle(280, 110, 34, "#fff1c9");
+    circle(268, 100, 6, "rgba(220,200,150,0.5)"); circle(292, 122, 8, "rgba(220,200,150,0.45)");
+    // город: два слоя с параллаксом
+    const drawCity = (arr, par, base, color, lit) => {
+      const len = cityLen(arr), off = (scroll * par) % len;
+      for (const rep of [0, len]) for (const b of arr) {
+        const x = b.x - off + rep;
+        if (x > W || x + b.w < 0) continue;
+        rrect(x, base - b.h, b.w, b.h + 4, 4, color);
+        for (const [wx, wy, warm] of b.lights) rrect(x + wx, base - b.h + wy, 7, 9, 1.5, warm ? "#ffb347" : lit);
+      }
+    };
+    drawCity(cityFar, 0.12, GROUND - 30, "#3a2a6e", "rgba(255,216,74,0.55)");
+    drawCity(cityNear, 0.3, GROUND, "#241a4d", "rgba(255,216,74,0.9)");
+    // земля: тротуар и дорога
+    ctx.fillStyle = vgrad(GROUND, H, ["#3b3170", "#1d1840"]); ctx.fillRect(0, GROUND, W, H - GROUND);
+    rrect(0, GROUND - 2, W, 8, 0, "#8f7ad8");
+    for (let x = -(scroll % 60); x < W; x += 60) rrect(x, GROUND + 40, 34, 6, 3, "rgba(255,255,255,0.25)");
+    for (let x = -(scroll * 1.2 % 90); x < W; x += 90) rrect(x, GROUND + 78, 50, 4, 2, "rgba(255,255,255,0.12)");
+    // линии скорости
+    if (state === "play" && speed > 500) {
+      ctx.globalAlpha = Math.min(0.5, (speed - 500) / 400);
+      for (let i = 0; i < 6; i++) { const y = 140 + ((i * 97 + t * 900) % 360); rrect(W - ((t * 1400 + i * 211) % (W + 200)), y, 70, 2, 1, COLORS.white); }
+      ctx.globalAlpha = 1;
+    }
+    if (state === "title") {
+      drawTakopi(W / 2, 200 + Math.sin(t * 3) * 8, 120, { t });
+      card({ title: "ТАКОПИ-БЕГ", lines: ["Тап — прыжок", "Ещё тап в воздухе — двойной", ["Собирай печеньки!", COLORS.yellow]], hint: "Нажми, чтобы начать", y: 300, dim: false });
+      text("Рекорд: " + best, W / 2, 600, { size: 16, color: COLORS.muted, shadow: false });
+      return;
+    }
+    // печеньки
+    for (const c of cookies) {
+      const bob = Math.sin(t * 5 + c.x * 0.05) * 3;
+      circle(c.x, c.y + bob, 18, "rgba(255,200,80,0.18)");
+      circle(c.x, c.y + bob, 13, "#e8a14a"); circle(c.x - 2, c.y + bob - 2, 11, "#f2b862");
+      for (const [dx, dy] of [[-4, -3], [4, -1], [-1, 5], [5, 5]]) circle(c.x + dx, c.y + bob + dy, 2, "#6b3a1f");
+    }
+    // препятствия
+    for (const o of obs) {
+      if (o.type === "cone") {
+        ctx.beginPath(); ctx.moveTo(o.x + o.w / 2, o.y); ctx.lineTo(o.x + o.w - 3, o.y + o.h - 6); ctx.lineTo(o.x + 3, o.y + o.h - 6); ctx.closePath();
+        ctx.fillStyle = vgrad(o.y, o.y + o.h, ["#ffb35c", "#ff7a2a"]); ctx.fill();
+        ctx.save(); ctx.clip(); rrect(o.x, o.y + 14, o.w, 6, 0, "#ffffff"); rrect(o.x, o.y + 26, o.w, 6, 0, "#ffffff"); ctx.restore();
+        rrect(o.x - 3, o.y + o.h - 7, o.w + 6, 7, 3, "#e0602a");
+      } else if (o.type === "crate") {
+        rrect(o.x, o.y, o.w, o.h, 6, "#b9783e"); rrect(o.x + 4, o.y + 4, o.w - 8, o.h - 8, 4, "#d8955a");
+        ctx.strokeStyle = "#8f5527"; ctx.lineWidth = 5; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(o.x + 8, o.y + 8); ctx.lineTo(o.x + o.w - 8, o.y + o.h - 8); ctx.stroke();
+        rrect(o.x, o.y, o.w, 6, 3, "rgba(255,255,255,0.2)");
+      } else {
+        const f = Math.sin(t * 16 + o.ph);
+        ctx.fillStyle = "#6b6f9e"; ctx.beginPath(); ctx.ellipse(o.x + 22, o.y + 14, 17, 10, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#8a8fc4"; ctx.beginPath(); ctx.moveTo(o.x + 18, o.y + 12); ctx.lineTo(o.x + 30, o.y + 12 - f * 14); ctx.lineTo(o.x + 34, o.y + 14); ctx.fill();
+        circle(o.x + 9, o.y + 11, 7, "#6b6f9e"); circle(o.x + 7, o.y + 9, 2.2, COLORS.white); circle(o.x + 6.5, o.y + 9, 1.2, COLORS.black);
+        ctx.fillStyle = COLORS.orange; ctx.beginPath(); ctx.moveTo(o.x + 2, o.y + 11); ctx.lineTo(o.x - 6, o.y + 13); ctx.lineTo(o.x + 2, o.y + 15); ctx.fill();
+      }
+    }
+    // Такопи: на бегу подпрыгивает, во втором прыжке крутится
+    const runBob = p.jumps === 0 && state === "play" ? Math.abs(Math.sin(t * 16)) * 4 : 0;
+    ctx.save();
+    ctx.translate(PX, p.y - 26 - runBob);
+    if (p.spin > 0) ctx.rotate((1 - p.spin) * Math.PI * 2);
+    drawTakopi(0, 0, 58, { t, mood: state === "over" ? "ko" : p.jumps ? "oh" : "happy", squash: p.squash });
+    ctx.restore();
+    drawParticles();
+  },
+  drawUI(t) {
+    if (state === "title") return;
+    hudPill(W / 2, 56, "очки", Math.floor(score), COLORS.ink, "center");
+    hudPill(W - 14, 56, "★", best, COLORS.yellow, "right");
+    if (state === "over") {
+      card({ title: "ОЙ, ПИ!", lines: ["Очки: " + Math.floor(score), [Math.floor(score) >= best && score > 0 ? "Новый рекорд!" : "Рекорд: " + best, COLORS.yellow]],
+             hint: overT > 0.7 ? "Нажми — ещё раз" : "", y: 220 });
+    }
+  },
+};
+run(game);
+</script>
+</body>
+</html>

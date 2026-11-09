@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Такопи-гонки</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;700;800;900&display=swap">
+<link rel="stylesheet" href="game.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+<a class="back" href="index.html">← игры</a>
+<canvas id="game"></canvas>
+<script src="engine.js"></script>
+<script>
+const ID = "race", ROAD_X = 62, ROAD_W = 236, LANES = 3, LANE_W = ROAD_W / LANES, PY = 500, TURBO = 3;
+const laneX = l => ROAD_X + LANE_W * (l + 0.5);
+const PAINTS = [
+  { b: "#4f8dff", d: "#2a56b8", l: "#a9c9ff" }, { b: "#43c96b", d: "#21844a", l: "#a8f0bd" },
+  { b: "#ff9a3c", d: "#c4601a", l: "#ffd0a0" }, { b: "#a58cff", d: "#6a4fd0", l: "#d8ccff" },
+  { b: "#3fd6d6", d: "#1c8f9a", l: "#b0f5f2" }, { b: "#f2f0f7", d: "#a9a6bd", l: "#ffffff" },
+  { b: "#ff5e6c", d: "#b8303e", l: "#ffb3ba" },
+];
+const PINK = { b: COLORS.pink, d: "#c43c82", l: "#ffd0e6" };
+let state = "title", overT = 0, score = 0, best = getBest(ID), newBest = false, clock = 0;
+let p, cars = [], pickups = [], speed = 300, spawn = 0, scroll = 0, turbo = 0, nextKmh = 125, turboTick = 0;
+
+// декор обочины: деревья, кусты, цветы, камни; фонари отдельно
+const deco = [];
+function makeDeco(d, y) {
+  const left = Math.random() < 0.5, k = Math.random();
+  d.side = left ? 0 : 1;
+  d.type = k < 0.45 ? "tree" : k < 0.75 ? "bush" : k < 0.9 ? "flowers" : "rock";
+  d.x = left ? rand(6, ROAD_X - 22) : rand(ROAD_X + ROAD_W + 22, W - 6);
+  d.y = y; d.s = rand(0.8, 1.2); d.hue = Math.random();
+  return d;
+}
+for (let i = 0; i < 16; i++) deco.push(makeDeco({}, -80 + i * ((H + 160) / 16)));
+deco.sort((a, b) => a.y - b.y);
+const patches = Array.from({ length: 7 }, (_, i) => ({ x: rand(ROAD_X + 14, ROAD_X + ROAD_W - 40), y: i * 120, w: rand(18, 40), h: rand(8, 18) }));
+
+function start() {
+  state = "play"; score = 0; speed = 300; spawn = 0.6; turbo = 0; nextKmh = 125; newBest = false;
+  p = { lane: 1, x: laneX(1), tilt: 0, spin: 0, spinV: 0, lastLane: 1, bump: 0 };
+  cars = []; pickups = [];
+  Sound.start();
+}
+function steer(d) {
+  if (state === "title" || (state === "over" && overT > 0.9)) return start();
+  if (state !== "play" || !d) return;
+  const nl = clamp(p.lane + d, 0, LANES - 1);
+  if (nl === p.lane) { Sound.bump(); p.bump = d; return; }
+  // впритирку: увернулся от машины прямо перед носом
+  const near = cars.find(c => !c.dead && c.lane === p.lane && c.y + c.h / 2 > PY - 44 - 70 && c.y + c.h / 2 < PY - 30);
+  p.lastLane = p.lane; p.lane = nl;
+  Sound.swoosh();
+  if (near && !near.nearDone) {
+    near.nearDone = true; score += 15;
+    floatText("Впритирку! +15", W / 2, PY - 120, COLORS.cyan, 22);
+    Sound.melody([880, 1320], 0.06, { type: "triangle", vol: 0.12 });
+  }
+}
+on("swipe", d => { if (d === "left") steer(-1); else if (d === "right") steer(1); else steer(0); });
+on("tap", x => steer(state === "play" ? (x < W / 2 ? -1 : 1) : 0));
+on("key", c => {
+  if (c === "ArrowLeft" || c === "KeyA") steer(-1);
+  else if (c === "ArrowRight" || c === "KeyD") steer(1);
+  else if ((c === "Space" || c === "Enter") && state !== "play") steer(0);
+});
+
+function crash(c) {
+  state = "over"; overT = 0;
+  newBest = Math.floor(score) > best; best = saveBest(ID, Math.floor(score));
+  p.spinV = (p.x < c.x ? -1 : 1) * 9;
+  c.hitT = 0.3;
+  const x = (p.x + c.x) / 2, y = PY - 40;
+  shake(1.3); Sound.explode(true);
+  setTimeout(() => Sound.lose(), 500);
+  burst(x, y, 40, [COLORS.yellow, COLORS.orange, COLORS.red, COLORS.white], { speed: 300, gravity: 0, life: 0.8, size: 4.5 });
+  burst(x, y, 16, ["#8a86a8", "#5c5878", "#c9c6dc"], { speed: 90, gravity: -60, life: 1.4, size: 7 });
+}
+function ram(c) {
+  c.dead = true; c.vx = (c.x < p.x ? -1 : c.x > p.x ? 1 : (Math.random() < 0.5 ? -1 : 1)) * rand(260, 360); c.rotV = Math.sign(c.vx) * rand(5, 9); c.rot = 0;
+  score += 30; shake(0.55);
+  Sound.explode(); Sound.hit();
+  floatText("Таран! +30", c.x, c.y - 30, COLORS.yellow, 22);
+  burst(c.x, c.y + c.h / 2, 26, [COLORS.yellow, COLORS.orange, COLORS.white, c.paint.b], { speed: 260, gravity: 0, size: 4 });
+}
+
+const game = {
+  start,
+  update(dt) {
+    clock += dt;
+    if (state !== "play") {
+      overT += dt;
+      const v = state === "title" ? 160 : Math.max(0, 200 - overT * 400);
+      scroll += v * dt; moveDeco(v * dt);
+      if (state === "over") {
+        p.spin += p.spinV * dt; p.spinV *= Math.pow(0.08, dt);
+        if (Math.random() < dt * 10) particles.push({ x: p.x + rand(-8, 8), y: PY - 20, vx: rand(-15, 15), vy: rand(-60, -30), t: 0, life: 1.2, s: rand(5, 9), c: "rgba(120,115,145,0.55)", g: -20 });
+        for (const c of cars) if (c.dead) { c.x += c.vx * dt; c.rot += c.rotV * dt; }
+      }
+      return;
+    }
+    // турбо
+    if (turbo > 0) {
+      turbo -= dt;
+      if (turbo < 1) { turboTick -= dt; if (turboTick <= 0) { Sound.tick(); turboTick = 0.2; } }
+      if (turbo <= 0) { turbo = 0; Sound.tone(700, 0.35, { type: "sawtooth", vol: 0.07, slide: -450 }); floatText("Турбо всё", p.x, PY - 70, COLORS.muted, 16); }
+    }
+    speed = Math.min(800, speed + 10 * dt);
+    const kmh = Math.floor(speed / 3);
+    if (kmh >= nextKmh) {
+      floatText(nextKmh + " км/ч!", W / 2, 170, COLORS.yellow, 30);
+      Sound.melody([523, 784, 1047], 0.06, { type: "square", vol: 0.08 });
+      nextKmh += 25;
+    }
+    const v = speed * (turbo > 0 ? 1.6 : 1);
+    const traffic = speed * 0.45;   // все попутные машины едут одинаково — строй не ломается
+    scroll += v * dt; moveDeco(v * dt);
+    score += v * dt / 30;
+    p.x = lerp(p.x, laneX(p.lane), Math.min(1, dt * 13));
+    p.tilt = (laneX(p.lane) - p.x) * 0.006;
+    p.bump = lerp(p.bump, 0, Math.min(1, dt * 12));
+
+    spawn -= dt;
+    if (spawn <= 0) {
+      const band = 130 + v * 0.35;
+      const free = [0, 1, 2].filter(l => !cars.some(c => !c.dead && c.lane === l && c.y - c.h / 2 < band));
+      if (free.length > 1) {   // всегда оставляем свободную полосу
+        const lane = free[Math.floor(rand(0, free.length))];
+        const r = Math.random(), type = r < 0.42 ? "sedan" : r < 0.68 ? "compact" : r < 0.87 ? "van" : "truck";
+        const { w, h } = MODELS[type];
+        cars.push({ lane, type, x: laneX(lane), y: -h / 2 - 10, w, h, paint: PAINTS[Math.floor(rand(0, PAINTS.length))] });
+        const other = free.filter(l => l !== lane);
+        if (Math.random() < 0.13 && other.length) {
+          const pl = other[Math.floor(rand(0, other.length))];
+          pickups.push({ x: laneX(pl), y: -30, ph: Math.random() * 6 });
+        }
+      }
+      spawn = rand(0.45, 0.95) * Math.max(0.5, 300 / speed);
+    }
+    for (const c of cars) {
+      if (c.dead) { c.x += c.vx * dt; c.y += (v - traffic) * 0.6 * dt; c.rot += c.rotV * dt; }
+      else c.y += (v - traffic) * dt;
+    }
+    for (const q of pickups) q.y += v * dt;
+    cars = cars.filter(c => c.y - c.h < H + 40 && c.x > -120 && c.x < W + 120);
+    pickups = pickups.filter(q => q.y < H + 40);
+
+    // выхлоп и пыль из-под колёс
+    if (Math.random() < dt * (turbo > 0 ? 40 : 10)) {
+      const fire = turbo > 0;
+      particles.push({ x: p.x + rand(-12, 12), y: PY + 44, vx: rand(-20, 20), vy: fire ? rand(160, 260) : rand(80, 140), t: 0, life: fire ? 0.35 : 0.5, s: fire ? rand(3, 5) : rand(2, 3.5),
+        c: fire ? (Math.random() < 0.5 ? COLORS.yellow : COLORS.orange) : "rgba(200,195,225,0.45)", g: 0 });
+    }
+
+    const me = { x: p.x - 19, y: PY - 38, w: 38, h: 76 };
+    pickups = pickups.filter(q => {
+      if (!hit(me, { x: q.x - 16, y: q.y - 16, w: 32, h: 32 })) return true;
+      turbo = TURBO; turboTick = 0; score += 20;
+      Sound.power(); shake(0.3);
+      floatText("ТУРБО!", p.x, PY - 80, COLORS.yellow, 26);
+      burst(q.x, q.y, 24, [COLORS.yellow, "#fff6b0", COLORS.cyan], { speed: 220, gravity: 0, size: 3.5 });
+      return false;
+    });
+    for (const c of cars) {
+      if (c.dead) continue;
+      if (!hit(me, { x: c.x - c.w / 2 + 4, y: c.y - c.h / 2 + 4, w: c.w - 8, h: c.h - 8 })) continue;
+      if (turbo > 0) ram(c);
+      else return crash(c);
+    }
+  },
+  draw(t) {
+    drawWorld(t);
+    if (state === "title") {
+      drawCar(W / 2, 200 + Math.sin(t * 3) * 3, "sport", PINK, { player: true, t, scale: 1.5, beam: 0.6 });
+      return;
+    }
+    // молнии
+    for (const q of pickups) drawBolt(q.x, q.y, t, q.ph);
+    // машины
+    for (const c of cars) drawCar(c.x, c.y, c.type, c.paint, { rot: c.rot || 0, alpha: c.dead ? 0.85 : 1 });
+    // игрок
+    if (turbo > 0) {   // сияние турбо
+      const g = ctx.createRadialGradient(p.x, PY, 10, p.x, PY, 85);
+      g.addColorStop(0, "rgba(255,216,74,0.4)"); g.addColorStop(1, "rgba(255,216,74,0)");
+      ctx.fillStyle = g; ctx.fillRect(p.x - 85, PY - 85, 170, 170);
+    }
+    drawParticles();
+    const flashT = turbo > 0 && turbo < 1 && Math.floor(t * 10) % 2;
+    const lean = state === "play" ? clamp((laneX(p.lane) - p.x) / LANE_W, -1, 1) : 0;
+    drawCar(p.x + p.bump * 6, PY, "sport", flashT ? { b: COLORS.yellow, d: "#c99a14", l: "#fff3b0" } : PINK,
+      { player: true, t, rot: p.tilt + p.spin, lean, turbo: turbo > 0, ko: state === "over",
+        beam: state === "over" ? 0 : turbo > 0 ? 1 : 0.35 + clamp((speed - 300) / 500, 0, 1) * 0.5 });
+    // линии скорости
+    if (state === "play" && (turbo > 0 || speed > 550)) {
+      ctx.globalAlpha = turbo > 0 ? 0.55 : Math.min(0.35, (speed - 550) / 600);
+      for (let i = 0; i < 8; i++) {
+        const x = 20 + ((i * 131) % (W - 40)), y = ((t * 1600 + i * 173) % (H + 200)) - 100;
+        rrect(x, y, 2.5, 80, 1.2, COLORS.white);
+      }
+      ctx.globalAlpha = 1;
+    }
+  },
+  drawUI(t) {
+    if (state === "title") {
+      card({ title: "ТАКОПИ-ГОНКИ", lines: ["Свайп, тап или стрелки ←/→", "Объезжай машины", ["⚡ — турбо-таран на 3 сек!", COLORS.yellow]],
+             hint: "Нажми, чтобы начать", y: 320, dim: false });
+      text("Рекорд: " + best, W / 2, 600, { size: 16, color: COLORS.ink, stroke: 4 });
+      return;
+    }
+    hudPill(14, 56, "очки", Math.floor(score), COLORS.ink, "left");
+    hudPill(W - 14, 56, "★", best, COLORS.yellow, "right");
+    // спидометр
+    const kmh = Math.floor(speed * (turbo > 0 ? 1.6 : 1) / 3);
+    rrect(14, 98, 96, 26, 13, "rgba(10,8,30,0.55)");
+    text(kmh + " км/ч", 62, 112, { size: 15, weight: 800, color: turbo > 0 ? COLORS.yellow : COLORS.ink, shadow: false });
+    if (turbo > 0) {
+      const bw = 120, bx = W - 14 - bw;
+      rrect(bx, 98, bw, 26, 13, "rgba(10,8,30,0.55)");
+      rrect(bx + 4, 102, (bw - 8) * clamp(turbo / TURBO, 0, 1), 18, 9, vgrad(102, 120, ["#fff3b0", COLORS.yellow, COLORS.orange]));
+      text("⚡ ТУРБО", bx + bw / 2, 112, { size: 13, weight: 900, color: COLORS.black, shadow: false });
+    }
+    if (state === "over" && overT > 0.5) {
+      card({ title: "АВАРИЯ, ПИ!", lines: ["Очки: " + Math.floor(score), "Скорость: " + Math.floor(speed / 3) + " км/ч",
+        [newBest ? "Новый рекорд!" : "Рекорд: " + best, COLORS.yellow]], hint: overT > 0.9 ? "Нажми — ещё раз" : "", y: 210 });
+    }
+  },
+};
+
+function moveDeco(dy) {
+  for (const d of deco) if ((d.y += dy) > H + 80) makeDeco(d, d.y - (H + 160));
+  for (const q of patches) if ((q.y += dy) > H + 20) { q.y -= 840; q.x = rand(ROAD_X + 14, ROAD_X + ROAD_W - 40); }
+}
+
+function drawWorld(t) {
+  // трава с полосами покоса
+  ctx.fillStyle = "#2f8a4c"; ctx.fillRect(0, 0, W, H);
+  const band = 80, off = scroll % (band * 2);
+  ctx.fillStyle = "#348f52";
+  for (let y = off - band * 2; y < H; y += band * 2) ctx.fillRect(0, y, W, band);
+  // обочины-грунт
+  ctx.fillStyle = "#6e6a7e"; ctx.fillRect(ROAD_X - 14, 0, 14, H); ctx.fillRect(ROAD_X + ROAD_W, 0, 14, H);
+  // бордюр в красно-белую полоску
+  for (let y = (scroll % 40) - 40; y < H; y += 40) {
+    for (const bx of [ROAD_X - 10, ROAD_X + ROAD_W + 2]) {
+      rrect(bx, y, 8, 20, 0, "#ff4d5e"); rrect(bx, y + 20, 8, 20, 0, "#f6f3ff");
+    }
+  }
+  // асфальт
+  const ag = ctx.createLinearGradient(ROAD_X, 0, ROAD_X + ROAD_W, 0);
+  ag.addColorStop(0, "#2e2a40"); ag.addColorStop(0.15, "#3b3651"); ag.addColorStop(0.85, "#3b3651"); ag.addColorStop(1, "#2e2a40");
+  ctx.fillStyle = ag; ctx.fillRect(ROAD_X, 0, ROAD_W, H);
+  for (const q of patches) rrect(q.x, q.y, q.w, q.h, 5, "rgba(20,18,32,0.28)");
+  // краевые линии и разметка
+  rrect(ROAD_X + 6, 0, 3, H, 0, "rgba(246,243,255,0.75)"); rrect(ROAD_X + ROAD_W - 9, 0, 3, H, 0, "rgba(246,243,255,0.75)");
+  for (let l = 1; l < LANES; l++) {
+    const lx = ROAD_X + l * LANE_W;
+    for (let y = (scroll % 80) - 80; y < H; y += 80) rrect(lx - 3, y, 6, 42, 3, "rgba(246,243,255,0.8)");
+  }
+  // лужи света от фонарей
+  const ls = 260, lo = (scroll * 1) % ls;
+  for (let y = lo - ls; y < H + ls; y += ls) {
+    for (const [lx, side] of [[ROAD_X - 4, 1], [ROAD_X + ROAD_W + 4, -1]]) {
+      const yy = side > 0 ? y : y + ls / 2;
+      const g = ctx.createRadialGradient(lx + side * 30, yy, 4, lx + side * 30, yy, 90);
+      g.addColorStop(0, "rgba(255,214,140,0.22)"); g.addColorStop(1, "rgba(255,214,140,0)");
+      ctx.fillStyle = g; ctx.fillRect(lx + side * 30 - 90, yy - 90, 180, 180);
+    }
+  }
+  // декор: камни, цветы, кусты внизу; кроны деревьев сверху
+  for (const d of deco) {
+    if (d.type === "rock") {
+      ctx.fillStyle = "rgba(0,0,0,0.2)"; ctx.beginPath(); ctx.ellipse(d.x + 3, d.y + 5, 10 * d.s, 6 * d.s, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#9a96b0"; ctx.beginPath(); ctx.ellipse(d.x, d.y, 10 * d.s, 7 * d.s, 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#c4c0d8"; ctx.beginPath(); ctx.ellipse(d.x - 3, d.y - 2, 4 * d.s, 2.5 * d.s, 0.3, 0, Math.PI * 2); ctx.fill();
+    } else if (d.type === "flowers") {
+      const cols = [COLORS.yellow, COLORS.pinkL, "#ffffff", COLORS.violet];
+      for (let i = 0; i < 5; i++) {
+        const fx = d.x + Math.cos(i * 2.4) * 9 * d.s, fy = d.y + Math.sin(i * 2.4) * 7 * d.s;
+        circle(fx, fy, 3, cols[(i + Math.floor(d.hue * 4)) % 4]); circle(fx, fy, 1.2, COLORS.orange);
+      }
+    } else if (d.type === "bush") {
+      ctx.fillStyle = "rgba(0,0,0,0.22)"; ctx.beginPath(); ctx.ellipse(d.x + 4, d.y + 6, 16 * d.s, 10 * d.s, 0, 0, Math.PI * 2); ctx.fill();
+      for (const [ox, oy, r] of [[-8, 2, 9], [7, 2, 10], [0, -5, 10]]) circle(d.x + ox * d.s, d.y + oy * d.s, r * d.s, "#26743e");
+      for (const [ox, oy, r] of [[-9, 0, 5], [5, -1, 6], [-1, -8, 5]]) circle(d.x + ox * d.s, d.y + oy * d.s, r * d.s, "#3fa25a");
+    }
+  }
+  // фонари
+  for (let y = lo - ls; y < H + ls; y += ls) {
+    for (const [px, side] of [[ROAD_X - 22, 1], [ROAD_X + ROAD_W + 22, -1]]) {
+      const yy = side > 0 ? y : y + ls / 2;
+      ctx.strokeStyle = "#4a4660"; ctx.lineWidth = 4; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(px, yy); ctx.lineTo(px + side * 40, yy); ctx.stroke();
+      circle(px, yy, 5, "#5a5674");
+      const g = ctx.createRadialGradient(px + side * 42, yy, 1, px + side * 42, yy, 16);
+      g.addColorStop(0, "rgba(255,240,200,0.95)"); g.addColorStop(1, "rgba(255,220,150,0)");
+      ctx.fillStyle = g; ctx.fillRect(px + side * 42 - 16, yy - 16, 32, 32);
+      circle(px + side * 42, yy, 3.5, "#fff6d8");
+    }
+  }
+  for (const d of deco) {
+    if (d.type !== "tree") continue;
+    const r = 22 * d.s;
+    ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.beginPath(); ctx.ellipse(d.x + 8, d.y + 10, r, r * 0.85, 0, 0, Math.PI * 2); ctx.fill();
+    const g = ctx.createRadialGradient(d.x - r * 0.35, d.y - r * 0.4, 2, d.x, d.y, r * 1.1);
+    const light = d.hue < 0.3 ? "#ffb3d4" : "#7fd68f", mid = d.hue < 0.3 ? "#e86aa6" : "#2f9a4f", dark = d.hue < 0.3 ? "#a8336f" : "#1c6a36";
+    g.addColorStop(0, light); g.addColorStop(0.55, mid); g.addColorStop(1, dark);
+    for (const [ox, oy, k] of [[-0.45, 0.2, 0.62], [0.45, 0.25, 0.6], [0, -0.3, 0.68], [0, 0.1, 0.8]]) circle(d.x + ox * r, d.y + oy * r, r * k, g);
+    ctx.fillStyle = "rgba(255,255,255,0.22)"; ctx.beginPath(); ctx.ellipse(d.x - r * 0.3, d.y - r * 0.45, r * 0.3, r * 0.17, -0.5, 0, Math.PI * 2); ctx.fill();
+  }
+  // лёгкая виньетка сверху и снизу
+  ctx.fillStyle = vgrad(0, 120, ["rgba(14,12,34,0.55)", "rgba(14,12,34,0)"]); ctx.fillRect(0, 0, W, 120);
+  ctx.fillStyle = vgrad(H - 60, H, ["rgba(14,12,34,0)", "rgba(14,12,34,0.4)"]); ctx.fillRect(0, H - 60, W, 60);
+}
+
+function drawBolt(x, y, t, ph) {
+  const bob = Math.sin(t * 5 + ph) * 3, s = 1 + Math.sin(t * 8 + ph) * 0.06;
+  const g = ctx.createRadialGradient(x, y + bob, 4, x, y + bob, 34);
+  g.addColorStop(0, "rgba(255,230,90,0.65)"); g.addColorStop(1, "rgba(255,230,90,0)");
+  ctx.fillStyle = g; ctx.fillRect(x - 34, y + bob - 34, 68, 68);
+  ctx.save(); ctx.translate(x, y + bob); ctx.scale(s, s);
+  circle(0, 0, 17, vgrad(-17, 17, ["#5a4ab0", "#2c2270"]), COLORS.yellow, 3);
+  ctx.fillStyle = vgrad(-12, 12, ["#fff6b0", COLORS.yellow, COLORS.orange]);
+  ctx.beginPath(); ctx.moveTo(3, -12); ctx.lineTo(-7, 2); ctx.lineTo(-1, 2); ctx.lineTo(-4, 12); ctx.lineTo(7, -3); ctx.lineTo(1, -3); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- машины: вид сверху, нос смотрит вверх ----------
+// модели: размеры, доли длины под капот и салон, ширина крыши, оси колёс
+const MODELS = {
+  sport:   { w: 50, h: 90,  nose: 20, tail: 13, hood: 0.33, cabin: 0.38, ws: 15, rw: 9,  cw: 0.66, axles: [0.2, 0.78] },
+  sedan:   { w: 46, h: 84,  nose: 16, tail: 13, hood: 0.27, cabin: 0.44, ws: 13, rw: 10, cw: 0.7,  axles: [0.19, 0.78] },
+  compact: { w: 42, h: 70,  nose: 15, tail: 13, hood: 0.22, cabin: 0.5,  ws: 12, rw: 9,  cw: 0.72, axles: [0.18, 0.8] },
+  van:     { w: 50, h: 98,  nose: 12, tail: 7,  hood: 0.14, cabin: 0.8,  ws: 13, rw: 6,  cw: 0.82, axles: [0.16, 0.8] },
+  truck:   { w: 54, h: 128, axles: [0.12, 0.7, 0.86] },
+};
+const GLASS = ["#a9c8ff", "#3a4a86", "#1a1d3c"];
+
+function bodyPath(hw, hh, nose, tail) {
+  ctx.beginPath();
+  ctx.moveTo(-hw * 0.62, -hh);
+  ctx.quadraticCurveTo(0, -hh - 3, hw * 0.62, -hh);                 // скруглённый нос
+  ctx.quadraticCurveTo(hw, -hh, hw, -hh + nose);
+  ctx.bezierCurveTo(hw * 0.93, -hh * 0.2, hw * 0.93, hh * 0.2, hw, hh - tail);   // «талия»
+  ctx.quadraticCurveTo(hw, hh, hw * 0.7, hh);
+  ctx.quadraticCurveTo(0, hh + 2, -hw * 0.7, hh);                   // скруглённый багажник
+  ctx.quadraticCurveTo(-hw, hh, -hw, hh - tail);
+  ctx.bezierCurveTo(-hw * 0.93, hh * 0.2, -hw * 0.93, -hh * 0.2, -hw, -hh + nose);
+  ctx.quadraticCurveTo(-hw, -hh, -hw * 0.62, -hh);
+  ctx.closePath();
+}
+function poly(pts, fill) {
+  ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+}
+function paintGrad(hw, paint, shift = 0) {
+  const g = ctx.createLinearGradient(-hw, 0, hw, 0);
+  g.addColorStop(0, paint.d); g.addColorStop(0.18, paint.b); g.addColorStop(clamp(0.42 + shift, 0.25, 0.6), paint.l);
+  g.addColorStop(0.7, paint.b); g.addColorStop(1, paint.d);
+  return g;
+}
+// мягкая тень под машиной (параметры тени не масштабируются вместе с канвасом — учитываем вручную)
+function softShadow(scale, pathFn) {
+  const K = VIEW_SCALE * DPR * scale;
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.55)"; ctx.shadowBlur = 12 * K; ctx.shadowOffsetX = 4 * K; ctx.shadowOffsetY = 9 * K;
+  pathFn(); ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.fill();
+  ctx.restore();
+}
+function wheels(hw, hh, h, axles, roll) {
+  for (const a of axles) {
+    const ay = -hh + h * a;
+    for (const sx of [-1, 1]) {
+      const tx = sx > 0 ? hw - 5 : -hw - 4;
+      rrect(tx, ay - 10, 9, 20, 3.5, "#121018");
+      ctx.save(); ctx.beginPath(); ctx.rect(tx, ay - 10, 9, 20); ctx.clip();
+      ctx.strokeStyle = "rgba(255,255,255,0.13)"; ctx.lineWidth = 1.2;   // протектор крутится
+      for (let i = -1; i < 5; i++) { const ly = ay - 10 + (((i * 5 + roll) % 20) + 20) % 20; ctx.beginPath(); ctx.moveTo(tx, ly); ctx.lineTo(tx + 9, ly); ctx.stroke(); }
+      ctx.restore();
+      rrect(sx > 0 ? hw + 0.5 : -hw - 3, ay - 6, 2.5, 12, 1.2, "#c9c5dc");   // диск
+    }
+  }
+}
+function glassPane(pts, y0, y1, tint = 1) {
+  const g = ctx.createLinearGradient(0, y0, 0, y1);
+  g.addColorStop(0, GLASS[0]); g.addColorStop(0.45, GLASS[1]); g.addColorStop(1, GLASS[2]);
+  const ga = ctx.globalAlpha; ctx.globalAlpha = ga * tint; poly(pts, g); ctx.globalAlpha = ga;
+  // отражения
+  ctx.save(); poly(pts); ctx.clip();
+  const xs = pts.map(p => p[0]), l = Math.min(...xs), w = Math.max(...xs) - l;
+  ctx.fillStyle = "rgba(255,255,255,0.32)";
+  ctx.beginPath(); ctx.moveTo(l + w * 0.18, y1); ctx.lineTo(l + w * 0.36, y0); ctx.lineTo(l + w * 0.47, y0); ctx.lineTo(l + w * 0.29, y1); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.15)";
+  ctx.beginPath(); ctx.moveTo(l + w * 0.55, y1); ctx.lineTo(l + w * 0.7, y0); ctx.lineTo(l + w * 0.74, y0); ctx.lineTo(l + w * 0.59, y1); ctx.fill();
+  ctx.restore();
+}
+function headLights(hw, hh, glow) {
+  for (const sx of [-1, 1]) {
+    const lx = sx * hw * 0.55;
+    if (glow) {
+      const g = ctx.createRadialGradient(lx, -hh + 3, 1, lx, -hh + 3, 16);
+      g.addColorStop(0, "rgba(255,246,208,0.9)"); g.addColorStop(1, "rgba(255,246,208,0)");
+      ctx.fillStyle = g; ctx.fillRect(lx - 16, -hh - 13, 32, 32);
+    }
+    ctx.save(); ctx.translate(lx, -hh + 4); ctx.rotate(sx * 0.18);
+    rrect(-6, -2.5, 12, 5.5, 2.7, "#fff8dc", "rgba(0,0,0,0.25)", 1);
+    circle(sx * 2.5, 0.2, 1.6, "#ffffff");
+    ctx.restore();
+  }
+}
+function tailLights(hw, hh) {
+  for (const sx of [-1, 1]) {
+    const lx = sx * hw * 0.6;
+    const g = ctx.createRadialGradient(lx, hh - 2, 1, lx, hh - 2, 16);
+    g.addColorStop(0, "rgba(255,50,80,0.75)"); g.addColorStop(1, "rgba(255,50,80,0)");
+    ctx.fillStyle = g; ctx.fillRect(lx - 16, hh - 18, 32, 32);
+    ctx.save(); ctx.translate(lx, hh - 4); ctx.rotate(-sx * 0.15);
+    rrect(-6.5, -2.5, 13, 5, 2.5, "#ff2d4a", "rgba(90,0,20,0.5)", 1);
+    rrect(-4, -1.5, 5, 1.6, 0.8, "rgba(255,200,210,0.8)");
+    ctx.restore();
+  }
+}
+function beams(hw, hh, len, a) {
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  for (const sx of [-1, 1]) {
+    const bx = sx * hw * 0.55, g = ctx.createLinearGradient(0, -hh, 0, -hh - len);
+    g.addColorStop(0, `rgba(255,240,190,${0.42 * a})`); g.addColorStop(1, "rgba(255,240,190,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(bx - 5, -hh + 2); ctx.lineTo(bx + 5, -hh + 2);
+    ctx.lineTo(bx + 26 + sx * 6, -hh - len); ctx.lineTo(bx - 26 + sx * 6, -hh - len); ctx.fill();
+  }
+  ctx.restore();
+}
+function flames(hh, t) {
+  for (const ex of [-9, 9]) {
+    const fl = 20 + Math.sin(t * 60 + ex) * 5 + Math.random() * 10;
+    const g = ctx.createLinearGradient(0, hh, 0, hh + fl);
+    g.addColorStop(0, "#ffffff"); g.addColorStop(0.25, "#fff3a0"); g.addColorStop(0.6, COLORS.orange); g.addColorStop(1, "rgba(255,77,94,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(ex - 5, hh - 2); ctx.quadraticCurveTo(ex - 4, hh + fl * 0.6, ex, hh + fl); ctx.quadraticCurveTo(ex + 4, hh + fl * 0.6, ex + 5, hh - 2); ctx.fill();
+  }
+}
+
+// x,y — центр; lean от -1 до 1 — крен кузова при смене полосы
+function drawCar(x, y, model, paint, { player = false, t = 0, rot = 0, lean = 0, turbo = false, ko = false, alpha = 1, scale = 1, beam = 0 } = {}) {
+  const M = MODELS[model], w = M.w, h = M.h, hw = w / 2, hh = h / 2;
+  const roll = -scroll * 0.35;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(scale, scale); ctx.globalAlpha = alpha;
+  if (beam > 0) beams(hw, hh, 100 + beam * 90, beam);
+  if (model === "truck") { drawTruck(M, paint, roll); ctx.restore(); return; }
+  softShadow(scale, () => bodyPath(hw, hh, M.nose, M.tail));
+  wheels(hw, hh, h, M.axles, roll);
+  if (turbo) flames(hh, t);
+  // кузов
+  bodyPath(hw, hh, M.nose, M.tail);
+  ctx.fillStyle = paintGrad(hw, paint, -lean * 0.12); ctx.fill();
+  ctx.strokeStyle = "rgba(20,10,40,0.45)"; ctx.lineWidth = 1.2; ctx.stroke();
+  ctx.save(); bodyPath(hw, hh, M.nose, M.tail); ctx.clip();
+  ctx.fillStyle = vgrad(-hh, hh, ["rgba(255,255,255,0.22)", "rgba(255,255,255,0)", "rgba(0,0,0,0)", "rgba(0,0,0,0.22)"]);
+  ctx.fillRect(-hw, -hh - 4, w, h + 8);
+  const sx0 = -hw * 0.42 - lean * 2.5;   // глянцевая полоса-блик
+  rrect(sx0 - 3, -hh + 5, 7, h - 10, 3.5, "rgba(255,255,255,0.13)");
+  rrect(sx0, -hh + 7, 2.2, h - 14, 1.1, "rgba(255,255,255,0.5)");
+  ctx.restore();
+  // линии капота
+  const wsTop = -hh + h * M.hood;
+  ctx.strokeStyle = "rgba(0,0,0,0.13)"; ctx.lineWidth = 1.2;
+  for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(s * hw * 0.32, -hh + 6); ctx.quadraticCurveTo(s * hw * 0.42, (-hh + wsTop) / 2, s * hw * 0.5, wsTop - 1); ctx.stroke(); }
+  if (player) for (const s of [-1, 1]) rrect(s * 5 - 2, -hh + 3, 4, wsTop + hh - 5, 2, "rgba(255,255,255,0.85)");   // гоночные полосы
+  // салон уже кузова — так видна перспектива; крен сдвигает крышу
+  const cxo = -lean * 2.5;
+  const y1 = wsTop, y2 = y1 + M.ws, y4 = y1 + h * M.cabin, y3 = y4 - M.rw;
+  const a = hw * 0.84, a2 = hw * 0.78, r = hw * M.cw;
+  poly([[-a, y1], [a, y1], [cxo + r + 1.5, y2], [cxo + r + 1.5, y3], [a2, y4], [-a2, y4], [cxo - r - 1.5, y3], [cxo - r - 1.5, y2]], "#1b1d38");
+  ctx.fillStyle = "rgba(140,170,255,0.25)";   // боковые стёкла
+  for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(cxo + s * (r + 1), y2 + 2); ctx.lineTo(s * hw * 0.86, y2 + 4); ctx.lineTo(s * hw * 0.84, y3 - 2); ctx.lineTo(cxo + s * (r + 1), y3 - 1); ctx.fill(); }
+  for (const s of [-1, 1]) {   // зеркала
+    ctx.fillStyle = paint.d; ctx.beginPath(); ctx.ellipse(s * (hw + 2.5), y1 + 4, 4.5, 3, s * 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(200,220,255,0.7)"; ctx.beginPath(); ctx.ellipse(s * (hw + 3), y1 + 4.5, 2.2, 1.4, s * 0.3, 0, Math.PI * 2); ctx.fill();
+  }
+  const ws = [[-a + 2.5, y1 + 1.5], [a - 2.5, y1 + 1.5], [cxo + r - 0.5, y2], [cxo - r + 0.5, y2]];
+  const rear = [[cxo - r + 0.5, y3], [cxo + r - 0.5, y3], [a2 - 2.5, y4 - 1.5], [-a2 + 2.5, y4 - 1.5]];
+  if (player) {
+    // лобовое стекло и стеклянная крыша: внутри видно Такопи
+    const inner = [[-a + 2.5, y1 + 1.5], [a - 2.5, y1 + 1.5], [cxo + r - 0.5, y2], [cxo + r - 0.5, y3], [cxo - r + 0.5, y3], [cxo - r + 0.5, y2]];
+    poly(inner, "#4a2848");
+    ctx.save(); poly(inner); ctx.clip();
+    rrect(cxo - r + 2, y2 + 12, 2 * r - 4, y3 - y2, 6, "#6b3a63");   // спинка сиденья
+    drawTakopi(cxo, (y1 + y3) / 2 + 2, 34, { t, mood: ko ? "ko" : turbo ? "cool" : "happy" });
+    ctx.fillStyle = "rgba(120,160,255,0.14)"; ctx.fillRect(-hw, y1, w, y3 - y1);   // тонировка
+    ctx.fillStyle = "rgba(255,255,255,0.3)";   // блики стекла поверх Такопи
+    ctx.beginPath(); ctx.moveTo(-a, y1 + 11); ctx.lineTo(-a + 11, y1); ctx.lineTo(-a + 16, y1); ctx.lineTo(-a + 5, y1 + 11); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(a - 12, y3); ctx.lineTo(a, y3 - 14); ctx.lineTo(a, y3 - 10); ctx.lineTo(a - 7, y3); ctx.fill();
+    ctx.restore();
+    rrect(cxo - r - 1.5, y3 - 2.5, 2 * r + 3, 4, 2, paint.d);   // дуга между салоном и задним стеклом
+    glassPane(rear, y3, y4);
+    rrect(-hw - 1, hh - 9, w + 2, 6, 3, paint.d); rrect(-hw + 1, hh - 9, w - 2, 2, 1, "rgba(255,255,255,0.35)");   // спойлер
+  } else {
+    glassPane(ws, y1, y2);
+    const rg = ctx.createLinearGradient(cxo - r, 0, cxo + r, 0);   // крыша
+    rg.addColorStop(0, paint.b); rg.addColorStop(0.4, paint.l); rg.addColorStop(1, paint.b);
+    rrect(cxo - r, y2, 2 * r, y3 - y2, 5, rg);
+    rrect(cxo - r + 3, y2 + 2, r * 0.5, y3 - y2 - 4, 3, "rgba(255,255,255,0.18)");
+    if (model === "van") {   // багажник на крыше
+      ctx.strokeStyle = "rgba(0,0,0,0.25)"; ctx.lineWidth = 1.5;
+      for (let ry = y2 + 12; ry < y3 - 6; ry += 12) { ctx.beginPath(); ctx.moveTo(cxo - r + 4, ry); ctx.lineTo(cxo + r - 4, ry); ctx.stroke(); }
+    }
+    glassPane(rear, y3, y4, 0.9);
+  }
+  headLights(hw, hh, player);
+  tailLights(hw, hh);
+  ctx.restore();
+}
+
+function drawTruck(M, paint, roll) {
+  const w = M.w, h = M.h, hw = w / 2, hh = h / 2, cabH = 38;
+  softShadow(1, () => { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(-hw, -hh, w, h, 8); else ctx.rect(-hw, -hh, w, h); });
+  wheels(hw, hh, h, M.axles, roll);
+  // кабина
+  ctx.save(); ctx.translate(0, -hh + cabH / 2);
+  bodyPath(hw - 2, cabH / 2, 10, 4); ctx.fillStyle = paintGrad(hw - 2, paint); ctx.fill();
+  ctx.strokeStyle = "rgba(20,10,40,0.45)"; ctx.lineWidth = 1.2; ctx.stroke();
+  glassPane([[-hw + 6, -cabH / 2 + 6], [hw - 6, -cabH / 2 + 6], [hw - 8, -cabH / 2 + 17], [-hw + 8, -cabH / 2 + 17]], -cabH / 2 + 6, -cabH / 2 + 17);
+  rrect(-hw + 8, -cabH / 2 + 19, w - 16, 12, 4, paint.l);
+  for (const s of [-1, 1]) { ctx.fillStyle = "#2a2838"; ctx.beginPath(); ctx.ellipse(s * (hw + 1.5), -cabH / 2 + 10, 3, 5, 0, 0, Math.PI * 2); ctx.fill(); }
+  headLights(hw - 2, cabH / 2, false);
+  ctx.restore();
+  // фургон
+  const by = -hh + cabH - 2, bh = h - cabH + 2;
+  const bg = ctx.createLinearGradient(-hw, 0, hw, 0);
+  bg.addColorStop(0, "#a9a6bd"); bg.addColorStop(0.35, "#f4f2fa"); bg.addColorStop(0.7, "#dedbea"); bg.addColorStop(1, "#9c98b2");
+  rrect(-hw, by, w, bh, 5, bg, "rgba(20,10,40,0.4)", 1.2);
+  ctx.strokeStyle = "rgba(110,106,140,0.35)"; ctx.lineWidth = 1.2;
+  for (let ry = by + 10; ry < by + bh - 6; ry += 11) { ctx.beginPath(); ctx.moveTo(-hw + 4, ry); ctx.lineTo(hw - 4, ry); ctx.stroke(); }
+  rrect(-hw + 6, by + bh * 0.3, w - 12, 18, 6, paint.b);
+  rrect(-hw + 9, by + bh * 0.3 + 3, (w - 18) * 0.5, 4, 2, "rgba(255,255,255,0.45)");
+  rrect(-hw * 0.4 - 2, by + 4, 3, bh - 8, 1.5, "rgba(255,255,255,0.4)");
+  tailLights(hw, hh);
+}
+
+run(game);
+</script>
+</body>
+</html>

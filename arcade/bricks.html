@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Такопи-разбивалка</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;700;800;900&display=swap">
+<link rel="stylesheet" href="game.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+<a class="back" href="index.html">← игры</a>
+<canvas id="game"></canvas>
+<script src="engine.js"></script>
+<script>
+const ID = "bricks", PY = 556, PH = 14, COLS = 8, BW = 40, BH = 18, TOP = 112, LEFT = 14, RIGHT = W - 14, BR = 8;
+// цвета рядов: светлый, основной, тёмный
+const ROWS = [["#ff9aa4", "#ff4d5e", "#b8283a"], ["#ffc98a", "#ff9a3c", "#c4651a"], ["#fff0a8", "#ffd84a", "#c49a12"], ["#a8f5b8", "#5fdc7a", "#2a9a48"],
+              ["#b0fcfc", "#4fe0e6", "#1f9aa6"], ["#b5d2ff", "#6aa8ff", "#3a66c8"], ["#ffcfe5", "#ff7eb6", "#d0488c"]];
+let state = "title", overT = 0, score = 0, best = getBest(ID), clock = 0;
+let pad, ball, bricks, drops, lives, level, wide, combo, banner, hurtT = 0;
+const bokeh = Array.from({ length: 16 }, () => ({ x: Math.random() * W, y: Math.random() * H, r: rand(20, 60), v: rand(4, 12), c: ["255,126,182", "106,168,255", "165,140,255", "95,240,240"][Math.floor(Math.random() * 4)] }));
+
+function glow(x, y, r, color, a = 1) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, color); g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.globalAlpha = a; ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2); ctx.globalAlpha = 1;
+}
+function heart(x, y, s, color = COLORS.red) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s / 20, s / 20);
+  ctx.beginPath(); ctx.moveTo(0, 7);
+  ctx.bezierCurveTo(-12, -1, -9, -11, 0, -5); ctx.bezierCurveTo(9, -11, 12, -1, 0, 7);
+  ctx.fillStyle = color; ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.55)"; ctx.beginPath(); ctx.ellipse(-4.5, -4.5, 2.4, 1.5, -0.6, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function cookie(x, y, rot = 0, s = 1) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s, s);
+  glow(0, 0, 26, "rgba(255,200,80,0.5)");
+  circle(0, 0, 14, "#c9823a"); circle(-1.5, -1.5, 12, "#f2b862");
+  ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.beginPath(); ctx.ellipse(-5, -6, 4, 2, -0.6, 0, Math.PI * 2); ctx.fill();
+  for (const [dx, dy] of [[-4, -2], [4, -4], [-1, 5], [6, 4], [-7, 4]]) circle(dx, dy, 2.1, "#5e3218");
+  ctx.restore();
+}
+
+function buildLevel() {
+  bricks = [];
+  const rows = Math.min(7, 4 + level);
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < COLS; c++) {
+      // каждый уровень — свой узор с пустыми местами
+      if (level % 2 === 0 && (r + c) % 3 === 0) continue;
+      if (level % 3 === 0 && c > 1 && c < 6 && r === 2) continue;
+      if (level % 5 === 0 && r % 2 === 1 && (c === 3 || c === 4)) continue;
+      const hp = r === 0 && level > 1 ? 2 : 1;
+      bricks.push({ x: 20 + c * BW + 2, y: TOP + 34 + r * (BH + 6), w: BW - 4, h: BH, row: r % ROWS.length, hp, maxHp: hp, flash: 0, appear: -(r * 0.06 + c * 0.025) });
+    }
+}
+function resetBall() { ball = { x: pad.x + pad.w / 2, y: PY - BR, vx: 0, vy: 0, stuck: true, trail: [] }; combo = 0; }
+function start() {
+  state = "play"; score = 0; lives = 3; level = 1; wide = 0; drops = []; hurtT = 0;
+  pad = { x: W / 2 - 36, w: 72, vx: 0, squash: 0 };
+  buildLevel(); resetBall();
+  banner = { t: 1.5, text: "УРОВЕНЬ 1" };
+  Sound.start();
+}
+function launch() {
+  if (state === "title" || (state === "over" && overT > 0.8)) return start();
+  if (state === "play" && ball.stuck) {
+    const sp = Math.min(560, 300 + level * 30);
+    const dir = Math.abs(pad.vx) > 30 ? Math.sign(pad.vx) : (Math.random() < 0.5 ? -1 : 1);
+    ball.stuck = false; ball.vx = sp * 0.55 * dir; ball.vy = -sp * 0.83;
+    Sound.swoosh(); Sound.tone(520, 0.12, { type: "square", vol: 0.07, slide: 400 });
+    pad.squash = 1;
+  }
+}
+on("tap", launch);
+on("key", c => { if (window.rulesOpen && rulesOpen()) return; if (c === "Space" || c === "ArrowUp" || c === "Enter" || c === "KeyW") launch(); });
+
+function wallSound(f) { Sound.tone(f * rand(0.95, 1.05), 0.06, { type: "triangle", vol: 0.14, slide: -40 }); }
+
+function hitBrick(b) {
+  b.hp--; b.flash = 0.12; combo++;
+  const pitch = 440 * Math.pow(2, Math.min(combo - 1, 18) / 12);
+  if (b.hp > 0) {
+    // крепкий кирпич: металлический звон
+    Sound.tone(1600, 0.18, { type: "sine", vol: 0.12 }); Sound.tone(2400, 0.1, { type: "triangle", vol: 0.05 });
+    burst(ball.x, ball.y, 8, ["#e8ecff", "#9aa3c8", COLORS.white], { speed: 150, size: 2.5 });
+    shake(0.12);
+    return;
+  }
+  const col = ROWS[b.row];
+  score += 10;
+  floatText(combo > 2 ? "+10 ×" + combo : "+10", b.x + b.w / 2, b.y, combo > 2 ? COLORS.cyan : COLORS.yellow, combo > 2 ? 16 : 14);
+  Sound.tone(pitch, 0.12, { type: "square", vol: 0.08 }); Sound.noise(0.1, { vol: 0.18, from: 3500, to: 600 });
+  burst(b.x + b.w / 2, b.y + b.h / 2, 14, [col[0], col[1], col[2], COLORS.white], { speed: 190, size: 3.5, gravity: 500, up: 60 });
+  shake(0.18);
+  if (Math.random() < 0.12) drops.push({ x: b.x + b.w / 2, y: b.y + b.h / 2, rot: 0 });
+}
+
+function loseLife() {
+  lives--; hurtT = 1.2;
+  shake(0.9);
+  burst(ball.x, H - 6, 20, [COLORS.white, COLORS.pinkL, COLORS.red], { speed: 220, up: 160 });
+  if (lives <= 0) {
+    state = "over"; overT = 0; best = saveBest(ID, score);
+    Sound.hurt(); setTimeout(() => Sound.lose(), 300);
+    return;
+  }
+  Sound.hurt(); floatText("-1 ♥", pad.x + pad.w / 2, PY - 30, COLORS.red, 22);
+  resetBall();
+}
+
+function levelClear() {
+  score += 100; level++;
+  floatText("+100", W / 2, 300, COLORS.yellow, 30);
+  Sound.win(); shake(0.4);
+  for (let i = 0; i < 5; i++) burst(rand(40, W - 40), rand(160, 300), 16, [COLORS.pink, COLORS.yellow, COLORS.cyan, COLORS.green, COLORS.violet], { speed: 260, up: 120 });
+  buildLevel(); drops = []; wide = 0; resetBall();
+  banner = { t: 1.8, text: "УРОВЕНЬ " + level };
+}
+
+const game = {
+  start,
+  update(dt) {
+    clock += dt;
+    bokeh.forEach(b => { b.y -= b.v * dt; if (b.y < -b.r) { b.y = H + b.r; b.x = Math.random() * W; } });
+    if (state !== "play") { overT += dt; return; }
+    wide -= dt; hurtT -= dt; banner.t -= dt;
+    pad.squash = Math.max(0, pad.squash - dt * 6);
+    bricks.forEach(b => { b.appear = Math.min(1, b.appear + dt * 2.6); b.flash -= dt; });
+
+    // платформа: палец или стрелки; ширина плавно меняется
+    const target = wide > 0 ? 108 : 72, cx = pad.x + pad.w / 2;
+    pad.w = lerp(pad.w, target, Math.min(1, dt * 10)); pad.x = cx - pad.w / 2;
+    const x0 = pad.x;
+    if (input.down) pad.x += (input.x - pad.w / 2 - pad.x) * Math.min(1, dt * 18);
+    if (keys.ArrowLeft || keys.KeyA) pad.x -= 380 * dt;
+    if (keys.ArrowRight || keys.KeyD) pad.x += 380 * dt;
+    pad.x = clamp(pad.x, LEFT, RIGHT - pad.w);
+    pad.vx = lerp(pad.vx, (pad.x - x0) / Math.max(dt, 0.001), Math.min(1, dt * 12));
+
+    if (ball.stuck) { ball.x = pad.x + pad.w / 2; ball.y = PY - BR; ball.trail = []; }
+    else {
+      ball.trail.push([ball.x, ball.y]); if (ball.trail.length > 9) ball.trail.shift();
+      const sp = Math.hypot(ball.vx, ball.vy), n = Math.max(2, Math.ceil(sp * dt / 4));
+      for (let step = 0; step < n; step++) {
+        ball.x += ball.vx * dt / n; ball.y += ball.vy * dt / n;
+        if (ball.x < LEFT + BR) { ball.x = LEFT + BR; ball.vx = Math.abs(ball.vx); wallSound(330); burst(ball.x - BR, ball.y, 4, [COLORS.violet, COLORS.white], { speed: 80, size: 2, gravity: 0 }); }
+        if (ball.x > RIGHT - BR) { ball.x = RIGHT - BR; ball.vx = -Math.abs(ball.vx); wallSound(370); burst(ball.x + BR, ball.y, 4, [COLORS.violet, COLORS.white], { speed: 80, size: 2, gravity: 0 }); }
+        if (ball.y < TOP + BR) { ball.y = TOP + BR; ball.vy = Math.abs(ball.vy); wallSound(440); burst(ball.x, ball.y - BR, 4, [COLORS.violet, COLORS.white], { speed: 80, size: 2, gravity: 0 }); }
+        if (ball.vy > 0 && ball.y + BR >= PY && ball.y < PY + PH && ball.x > pad.x - BR * 0.7 && ball.x < pad.x + pad.w + BR * 0.7) {
+          const s = Math.min(660, Math.hypot(ball.vx, ball.vy) * 1.01);
+          let k = clamp(((ball.x - pad.x) / pad.w - 0.5) * 2 + pad.vx / 2500, -1, 1);   // край платформы даёт острый угол
+          if (Math.abs(k) < 0.12) k = k < 0 ? -0.12 : 0.12;   // не даём мячу застрять строго вертикально
+          ball.vx = s * k * 0.85; ball.vy = -Math.sqrt(s * s - ball.vx * ball.vx);
+          ball.y = PY - BR;
+          pad.squash = 1; combo = 0;
+          // высота звука зависит от места удара
+          Sound.tone(392 * Math.pow(2, (k + 1) / 2), 0.1, { type: "square", vol: 0.08, slide: 60 }); Sound.bump();
+          burst(ball.x, PY, 8, [COLORS.pinkL, COLORS.white], { speed: 120, size: 2.5, gravity: 200, up: 40 });
+        }
+        const b = bricks.find(b => b.hp > 0 && ball.x + BR > b.x && ball.x - BR < b.x + b.w && ball.y + BR > b.y && ball.y - BR < b.y + b.h);
+        if (b) {
+          const ox = Math.min(ball.x + BR - b.x, b.x + b.w - (ball.x - BR));
+          const oy = Math.min(ball.y + BR - b.y, b.y + b.h - (ball.y - BR));
+          if (ox < oy) { ball.vx = ball.x < b.x + b.w / 2 ? -Math.abs(ball.vx) : Math.abs(ball.vx); }
+          else { ball.vy = ball.y < b.y + b.h / 2 ? -Math.abs(ball.vy) : Math.abs(ball.vy); }
+          hitBrick(b);
+          bricks = bricks.filter(b => b.hp > 0);
+        }
+      }
+      if (ball.y > H + 20) return loseLife();
+    }
+    drops.forEach(d => { d.y += 150 * dt; d.rot += dt * 3; });
+    drops = drops.filter(d => {
+      if (d.y > H + 20) return false;
+      if (d.y + 13 >= PY && d.y - 13 < PY + PH && d.x + 12 > pad.x && d.x - 12 < pad.x + pad.w) {
+        wide = 10; score += 5;
+        Sound.coin(); Sound.power();
+        floatText("Шире! +5", clamp(d.x, 60, W - 60), PY - 40, COLORS.yellow, 20);
+        burst(d.x, PY, 18, [COLORS.yellow, COLORS.orange, "#fff3c4"], { speed: 170, up: 80 });
+        return false;
+      }
+      return true;
+    });
+    if (!bricks.length) levelClear();
+  },
+  draw(t) {
+    // фон
+    ctx.fillStyle = vgrad(0, H, ["#1a1240", "#2a1a5a", "#3a1f62", "#1a1238"]);
+    ctx.fillRect(0, 0, W, H);
+    bokeh.forEach(b => glow(b.x, b.y, b.r, `rgba(${b.c},0.16)`));
+    // плитка поля
+    ctx.save(); ctx.beginPath(); ctx.rect(LEFT, TOP, RIGHT - LEFT, H - TOP); ctx.clip();
+    for (let y = TOP; y < H; y += 32) for (let x = LEFT + ((y - TOP) / 32 % 2) * 32; x < RIGHT; x += 64) rrect(x + 2, y + 2, 28, 28, 6, "rgba(255,255,255,0.035)");
+    ctx.restore();
+    // неоновая рамка
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    const frame = () => { ctx.beginPath(); ctx.moveTo(LEFT - 4, H + 4); ctx.lineTo(LEFT - 4, TOP - 4); ctx.lineTo(RIGHT + 4, TOP - 4); ctx.lineTo(RIGHT + 4, H + 4); ctx.stroke(); };
+    ctx.strokeStyle = "rgba(165,140,255,0.25)"; ctx.lineWidth = 14; frame();
+    ctx.strokeStyle = "#8f7ad8"; ctx.lineWidth = 6; frame();
+    ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 1.5; frame();
+
+    if (state === "title") {
+      // демонстрационные кирпичи
+      for (let r = 0; r < 4; r++) for (let c = 0; c < COLS; c++) {
+        const y = TOP + 26 + r * 24 + Math.sin(t * 2 + c * 0.6 + r) * 3;
+        drawBrick({ x: 22 + c * BW, y, w: BW - 4, h: BH, row: r, hp: 1, maxHp: 1, flash: 0, appear: 1 });
+      }
+      drawTakopi(W / 2, 520 + Math.sin(t * 3) * 6, 92, { t, squash: Math.max(0, Math.sin(t * 6)) * 0.3 });
+      card({ title: "РАЗБИВАЛКА", lines: ["Веди пальцем или ← →", "Тап или пробел — запуск", ["Лови печеньки — шире!", COLORS.yellow]],
+             hint: "Нажми, чтобы начать", y: 236, dim: false });
+      text("Рекорд: " + best, W / 2, 610, { size: 16, color: COLORS.muted, shadow: false });
+      return;
+    }
+    bricks.forEach(drawBrick);
+    drops.forEach(d => cookie(d.x, d.y, d.rot, 0.9));
+    // платформа и Такопи, который её держит
+    const pcx = pad.x + pad.w / 2, sq = pad.squash;
+    const tMood = state === "over" || hurtT > 0 ? "ko" : (!ball.stuck && ball.vy > 0 && ball.y > PY - 120 ? "oh" : "happy");
+    ctx.strokeStyle = COLORS.pink; ctx.lineWidth = 5; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(pcx - 13, PY + 30); ctx.quadraticCurveTo(pcx - 22, PY + 22, pcx - 18, PY + PH - 2);
+    ctx.moveTo(pcx + 13, PY + 30); ctx.quadraticCurveTo(pcx + 22, PY + 22, pcx + 18, PY + PH - 2); ctx.stroke();
+    drawTakopi(pcx, PY + 40 + sq * 3, 50, { t, mood: tMood, squash: sq * 0.6 });
+    const ph = PH - sq * 3, py = PY + sq * 3;
+    glow(pcx, py + ph / 2, pad.w * 0.8, wide > 0 ? "rgba(255,216,74,0.35)" : "rgba(255,126,182,0.3)");
+    rrect(pad.x, py + 3, pad.w, ph, ph / 2, "rgba(0,0,0,0.3)");
+    rrect(pad.x, py, pad.w, ph, ph / 2, vgrad(py, py + ph, wide > 0 ? ["#fff3b0", COLORS.yellow, COLORS.orange] : [COLORS.pinkL, COLORS.pink, COLORS.pinkD]));
+    rrect(pad.x + 6, py + 2, pad.w - 12, 3, 1.5, "rgba(255,255,255,0.6)");
+    if (wide > 0) rrect(pcx - (pad.w - 16) / 2 * Math.min(1, wide / 10), py + ph - 5, (pad.w - 16) * Math.min(1, wide / 10), 2.5, 1.2, "rgba(120,50,0,0.6)");
+    // мяч со шлейфом
+    if (state === "play") {
+      ball.trail.forEach(([x, y], i) => { ctx.globalAlpha = (i + 1) / ball.trail.length * 0.35; circle(x, y, BR * (0.4 + i / ball.trail.length * 0.6), COLORS.cyan); });
+      ctx.globalAlpha = 1;
+      glow(ball.x, ball.y, 24, "rgba(160,250,255,0.55)");
+      const bg = ctx.createRadialGradient(ball.x - 3, ball.y - 3, 1, ball.x, ball.y, BR);
+      bg.addColorStop(0, "#ffffff"); bg.addColorStop(0.6, "#dff8ff"); bg.addColorStop(1, "#8fd8f0");
+      circle(ball.x, ball.y, BR, bg);
+      if (ball.stuck) {
+        ctx.globalAlpha = 0.6 + Math.sin(t * 6) * 0.3;
+        text("Тап — пуск!", W / 2, PY - 70, { size: 18, weight: 800, color: COLORS.yellow, stroke: 5 });
+        ctx.globalAlpha = 1;
+      }
+    }
+    drawParticles();
+  },
+  drawUI(t) {
+    if (state === "title") return;
+    rrect(14, 56, 92, 34, 17, "rgba(10,8,30,0.55)");
+    for (let i = 0; i < 3; i++) heart(34 + i * 26, 74, 22, i < lives ? COLORS.red : "rgba(255,255,255,0.15)");
+    hudPill(W / 2 + 8, 56, "очки", score, COLORS.ink, "center");
+    hudPill(W - 14, 56, "★", best, COLORS.yellow, "right");
+    // уровень — табличка на верхней стенке
+    rrect(W / 2 - 50, TOP - 13, 100, 20, 10, "#2a1f5e", "#8f7ad8", 2);
+    text("УРОВЕНЬ " + level, W / 2, TOP - 2.5, { size: 12, weight: 800, color: COLORS.cyan, shadow: false });
+    if (state === "play" && banner.t > 0) {
+      const a = Math.min(1, banner.t * 2.5), k = 1 + Math.max(0, banner.t - 1.3) * 1.5;
+      ctx.globalAlpha = a;
+      ctx.save(); ctx.translate(W / 2, 400); ctx.scale(k, k);
+      text(banner.text, 0, 0, { size: 36, weight: 900, color: COLORS.yellow, stroke: 7 });
+      ctx.restore(); ctx.globalAlpha = 1;
+    }
+    if (state === "over") {
+      card({ title: "КОНЕЦ ИГРЫ", lines: ["Очки: " + score, [score >= best && score > 0 ? "Новый рекорд!" : "Рекорд: " + best, COLORS.yellow], ["Уровень: " + level, COLORS.cyan]],
+             hint: overT > 0.8 ? "Нажми — ещё раз" : "", y: 220 });
+    }
+  },
+};
+
+function drawBrick(b) {
+  const e = b.appear <= 0 ? 0 : 1 - Math.pow(1 - b.appear, 3);   // въезд сверху при новом уровне
+  if (e <= 0) return;
+  const y = b.y - (1 - e) * 80;
+  ctx.globalAlpha = e;
+  const col = ROWS[b.row];
+  rrect(b.x, y + 3, b.w, b.h, 6, "rgba(0,0,0,0.3)");
+  if (b.maxHp > 1) {
+    // крепкий кирпич: стальная оправа
+    rrect(b.x, y, b.w, b.h, 6, vgrad(y, y + b.h, ["#f4f6ff", "#a9b0d0", "#5c6390"]));
+    rrect(b.x + 3, y + 3, b.w - 6, b.h - 6, 4, vgrad(y, y + b.h, [col[0], col[1]]));
+    for (const rx of [b.x + 3, b.x + b.w - 3]) circle(rx, y + b.h / 2, 1.6, "#e8ecff");
+    if (b.hp < b.maxHp) {
+      ctx.strokeStyle = "rgba(30,20,50,0.85)"; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(b.x + 10, y + 3); ctx.lineTo(b.x + 16, y + 9); ctx.lineTo(b.x + 13, y + 12); ctx.lineTo(b.x + 21, y + b.h - 3);
+      ctx.moveTo(b.x + 16, y + 9); ctx.lineTo(b.x + 25, y + 6); ctx.stroke();
+    }
+  } else {
+    rrect(b.x, y, b.w, b.h, 6, vgrad(y, y + b.h, [col[0], col[1], col[2]]));
+  }
+  rrect(b.x + 4, y + 2.5, b.w - 8, 3.5, 1.75, "rgba(255,255,255,0.5)");
+  if (b.flash > 0) rrect(b.x, y, b.w, b.h, 6, `rgba(255,255,255,${b.flash / 0.12 * 0.8})`);
+  ctx.globalAlpha = 1;
+}
+run(game);
+</script>
+</body>
+</html>

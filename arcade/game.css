@@ -1,0 +1,47 @@
+html, body { margin: 0; height: 100%; background: #0e0c22; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+body { display: flex; align-items: center; justify-content: center; }
+canvas { display: block; touch-action: none; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); }
+.back, .sound-btn { position: fixed; top: 10px; z-index: 3; border: 0; border-radius: 12px; cursor: pointer;
+  background: rgba(20, 16, 50, 0.72); color: #f6f3ff; font: 600 14px "Rubik", system-ui, sans-serif; padding: 8px 12px;
+  text-decoration: none; backdrop-filter: blur(6px); }
+.back { left: 10px; }
+.sound-btn { right: 10px; font-size: 16px; padding: 7px 11px; }
+.back:hover, .sound-btn:hover, .rules-btn:hover { background: rgba(224, 85, 154, 0.85); }
+.rules-btn { position: fixed; top: 10px; right: 62px; z-index: 3; border: 0; border-radius: 12px; cursor: pointer;
+  background: rgba(20, 16, 50, 0.72); color: #f6f3ff; font-size: 16px; padding: 7px 11px; backdrop-filter: blur(6px); }
+.rules { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; padding: 16px;
+  background: rgba(8, 6, 24, 0.72); backdrop-filter: blur(4px); touch-action: auto; }
+.rules.open { display: flex; }
+.rules-card { width: min(440px, 100%); max-height: 100%; overflow-y: auto; background: linear-gradient(180deg, #2c2756, #1c1940);
+  color: #f6f3ff; border-radius: 20px; padding: 22px 22px 18px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  border-top: 5px solid #ff7eb6; font: 15px/1.45 "Rubik", system-ui, sans-serif; user-select: text; }
+.rules-card h2 { margin: 0 0 8px; font-size: 24px; font-weight: 900; color: #ff7eb6; }
+.rules-card h3 { margin: 14px 0 4px; font-size: 13px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #ffd84a; }
+.rules-card .goal { margin: 0; color: #f6f3ff; }
+.rules-card ul { margin: 0; padding-left: 20px; color: #d9d4ff; }
+.rules-card li { margin: 3px 0; }
+.rules-ok { margin-top: 18px; width: 100%; border: 0; border-radius: 12px; padding: 12px; cursor: pointer;
+  background: #e0559a; color: #fff; font: 800 16px "Rubik", system-ui, sans-serif; }
+.rules-ok:hover { background: #ff7eb6; }
+
+
+/* Баннер отправки рекорда в Telegram */
+.tg-submit {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 40;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 10px 14px 12px; border-radius: 16px; min-width: 220px;
+  background: linear-gradient(180deg, rgba(30, 26, 64, 0.96), rgba(14, 12, 34, 0.96));
+  color: #f6f3ff; font: 700 14px "Rubik", system-ui, sans-serif;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(6px);
+}
+.tg-submit-txt { text-align: center; }
+.tg-submit-txt b { color: #ffd84a; font-weight: 900; font-size: 18px; margin-left: 4px; }
+.tg-submit-btn {
+  border: 0; border-radius: 12px; padding: 9px 16px; cursor: pointer;
+  background: #ff7eb6; color: #fff;
+  font: 800 14px "Rubik", system-ui, sans-serif;
+  transition: background 0.15s;
+}
+.tg-submit-btn:hover { background: #e0559a; }

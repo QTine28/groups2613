@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Такопи-сапёр</title>
+<style>
+:root {
+  --bg1: #15132b; --bg2: #241f4a; --panel: #2c2756; --panel2: #1c1940; --ink: #f4f1ff; --muted: #a9a3d6;
+  --pink: #ff7eb6; --pinkD: #d9488f; --led: #ff4d5e; --line: rgba(255, 255, 255, 0.08);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: radial-gradient(120% 90% at 50% 0%, var(--bg2), var(--bg1));
+  color: var(--ink); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  display: flex; flex-direction: column; align-items: center; overflow-x: hidden; overflow-y: auto;
+  user-select: none; -webkit-user-select: none; touch-action: manipulation;
+}
+.back { position: fixed; top: 10px; left: 12px; color: var(--muted); text-decoration: none; font-size: 14px; z-index: 3; }
+.back:hover { color: var(--pink); }
+.wrap { width: 100%; max-width: 1100px; padding: 40px 12px 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.board { background: linear-gradient(180deg, var(--panel), var(--panel2)); border-radius: 18px; padding: 12px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08); display: flex; flex-direction: column; gap: 12px; }
+.hud { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.led { min-width: 74px; padding: 6px 10px; border-radius: 10px; background: #0b0a18; box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.7);
+  font: 700 24px/1 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--led); text-shadow: 0 0 10px rgba(255, 77, 94, 0.55);
+  letter-spacing: 2px; text-align: center; font-variant-numeric: tabular-nums; }
+.face { width: 54px; height: 54px; border-radius: 14px; border: 0; cursor: pointer; padding: 0;
+  background: linear-gradient(180deg, #3b3570, #2a2558); box-shadow: 0 3px 0 #17142f, inset 0 1px 0 rgba(255, 255, 255, 0.12); }
+.face:active { transform: translateY(2px); box-shadow: 0 1px 0 #17142f; }
+.face svg { width: 42px; height: 42px; display: block; margin: auto; }
+.face .x, .face .glasses, .face .oh { display: none; }
+.face.press .oh { display: inline; } .face.press .smile { display: none; }
+.face.lost .x { display: inline; } .face.lost .eyes, .face.lost .smile { display: none; } .face.lost .sad { display: inline; }
+.face.won .glasses { display: inline; }
+.face .sad { display: none; }
+canvas { display: block; border-radius: 10px; touch-action: none; cursor: pointer; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+.seg { display: inline-flex; background: #15132b; border-radius: 12px; padding: 3px; gap: 3px; }
+.seg button, .tbtn { border: 0; background: transparent; color: var(--muted); font: 600 14px system-ui, sans-serif; padding: 8px 12px; border-radius: 9px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--pinkD); color: #fff; }
+.tbtn { background: #15132b; color: var(--ink); }
+.tbtn[aria-pressed="true"] { background: var(--pinkD); color: #fff; }
+.status { color: var(--muted); font-size: 14px; min-height: 20px; text-align: center; }
+.status b { color: var(--ink); }
+.rules { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; padding: 16px;
+  background: rgba(8, 6, 24, 0.72); backdrop-filter: blur(4px); }
+.rules.open { display: flex; }
+.rules-card { width: min(460px, 100%); max-height: 100%; overflow-y: auto; background: linear-gradient(180deg, var(--panel), var(--panel2));
+  border-radius: 20px; padding: 22px 22px 18px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); border-top: 5px solid var(--pink); user-select: text; }
+.rules-card h2 { margin: 0 0 8px; font-size: 24px; font-weight: 900; color: var(--pink); }
+.rules-card h3 { margin: 14px 0 4px; font-size: 13px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #ffd84a; }
+.rules-card .goal { margin: 0; }
+.rules-card ul { margin: 0; padding-left: 20px; color: #d9d4ff; }
+.rules-card li { margin: 3px 0; }
+.rules-ok { margin-top: 18px; width: 100%; border: 0; border-radius: 12px; padding: 12px; cursor: pointer;
+  background: var(--pinkD); color: #fff; font: 800 16px system-ui, sans-serif; }
+</style>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+<a class="back" href="index.html">← игры</a>
+<div class="wrap">
+  <div class="board" id="board">
+    <div class="hud">
+      <div class="led" id="minesLed">010</div>
+      <button class="face" id="face" title="Новая игра (R)" aria-label="Новая игра">
+        <svg viewBox="0 0 48 48">
+          <path d="M24 5c10 0 17 7 17 16 0 6-2 9-4 11l3 9-6-5-4 6-3-6-3 6-3-6-4 6-4-6-6 5 3-9c-2-2-4-5-4-11C7 12 14 5 24 5z" fill="#ff7eb6"/>
+          <ellipse cx="14" cy="26" rx="3.5" ry="2.2" fill="#ff4f7a" opacity=".7"/><ellipse cx="34" cy="26" rx="3.5" ry="2.2" fill="#ff4f7a" opacity=".7"/>
+          <g class="eyes"><circle cx="18" cy="19" r="3.4" fill="#fff"/><circle cx="30" cy="19" r="3.4" fill="#fff"/><circle cx="18.6" cy="19.6" r="1.8" fill="#111"/><circle cx="30.6" cy="19.6" r="1.8" fill="#111"/></g>
+          <g class="x" stroke="#111" stroke-width="2" stroke-linecap="round"><path d="M15 16l6 6M21 16l-6 6M27 16l6 6M33 16l-6 6"/></g>
+          <g class="glasses"><rect x="11" y="15" width="11" height="7" rx="2" fill="#111"/><rect x="26" y="15" width="11" height="7" rx="2" fill="#111"/><path d="M22 18h4" stroke="#111" stroke-width="2"/></g>
+          <path class="smile" d="M19 27q5 4 10 0" stroke="#b02a62" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <ellipse class="oh" cx="24" cy="28" rx="2.6" ry="3" fill="#b02a62"/>
+          <path class="sad" d="M19 30q5-4 10 0" stroke="#b02a62" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div class="led" id="timeLed">000</div>
+    </div>
+    <canvas id="field"></canvas>
+  </div>
+  <div class="controls">
+    <div class="seg" id="levels" role="group" aria-label="Сложность">
+      <button data-l="0">Лёгкий</button><button data-l="1">Средний</button><button data-l="2">Профи</button>
+    </div>
+    <button class="tbtn" id="mode" aria-pressed="false" title="Режим тапа (F)">⛏ Открывать</button>
+    <button class="tbtn" id="sound" aria-pressed="true" title="Звук">🔊</button>
+    <button class="tbtn" id="rulesBtn" title="Правила">❓ Правила</button>
+  </div>
+  <div class="status" id="status">Долгое нажатие или правая кнопка — флажок</div>
+</div>
+<div class="rules" id="rules">
+  <div class="rules-card" role="dialog" aria-label="Правила">
+    <h2>Такопи-сапёр</h2>
+    <p class="goal">🎯 Открыть все клетки без мин. Мины трогать нельзя!</p>
+    <h3>Как читать поле</h3>
+    <ul>
+      <li>Цифра в клетке — сколько мин в 8 клетках вокруг неё (по сторонам и по диагоналям)</li>
+      <li>Пустая клетка — вокруг мин нет, соседи открываются сами волной</li>
+      <li>Пример: у «1» остался один закрытый сосед — мина именно там, ставь флажок</li>
+    </ul>
+    <h3>Управление</h3>
+    <ul>
+      <li>Тап / левая кнопка — открыть клетку</li>
+      <li>Долгое нажатие / правая кнопка — флажок «здесь мина» (ещё раз — снять)</li>
+      <li>Кнопка «⛏ Открывать / 🚩 Флажки» — переключает, что делает обычный тап</li>
+      <li>Тап по цифре, вокруг которой уже стоят все её флажки, — открывает остальных соседей разом</li>
+      <li>Такопи сверху или клавиша R — новая игра</li>
+    </ul>
+    <h3>Правила</h3>
+    <ul>
+      <li>Первый ход всегда безопасен</li>
+      <li>Открыл мину — проигрыш, все мины взрываются, неверные флажки перечёркнуты</li>
+      <li>Клетку с флажком открыть нельзя — сначала сними флажок</li>
+      <li>Счётчик слева — сколько мин осталось без флажка, справа — время</li>
+    </ul>
+    <h3>Уровни</h3>
+    <ul><li>Лёгкий 9×9 — 10 мин · Средний 16×16 — 40 мин · Профи 30×16 — 99 мин</li><li>Лучшее время запоминается для каждого уровня</li></ul>
+    <button class="rules-ok" id="rulesOk">Понятно, играем!</button>
+  </div>
+</div>
+
+<script>
+// ---------- звук: синтез в WebAudio, без файлов ----------
+const Sound = (() => {
+  let ac = null, master = null, on = true;
+  try { on = localStorage.getItem("takopi-sound") !== "off"; } catch (e) {}
+  function ctx() {
+    if (!ac) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ac = new AC(); master = ac.createGain(); master.gain.value = 0.5; master.connect(ac.destination);
+    }
+    if (ac.state === "suspended") ac.resume();
+    return ac;
+  }
+  function tone(freq, dur, { type = "square", vol = 0.2, slide = 0, delay = 0, attack = 0.004 } = {}) {
+    const a = on && ctx(); if (!a) return;
+    const t0 = a.currentTime + delay, o = a.createOscillator(), g = a.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t0);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + dur + 0.02);
+  }
+  function noise(dur, { vol = 0.4, from = 1800, to = 120, delay = 0 } = {}) {
+    const a = on && ctx(); if (!a) return;
+    const t0 = a.currentTime + delay, len = Math.floor(a.sampleRate * dur), buf = a.createBuffer(1, len, a.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.6);
+    const src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+    src.buffer = buf; f.type = "lowpass"; f.frequency.setValueAtTime(from, t0); f.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+    g.gain.value = vol; src.connect(f); f.connect(g); g.connect(master); src.start(t0);
+  }
+  return {
+    get on() { return on; },
+    set on(v) { on = v; try { localStorage.setItem("takopi-sound", v ? "on" : "off"); } catch (e) {} if (v) ctx(); },
+    unlock: () => on && ctx(),
+    click: () => tone(880, 0.05, { type: "triangle", vol: 0.18 }),
+    open(n) {   // раскрытие волной: короткое «ш-ш» и восходящая лесенка нот
+      noise(Math.min(0.5, 0.12 + n * 0.006), { vol: 0.12, from: 4000, to: 900 });
+      const steps = Math.min(6, 1 + Math.floor(n / 6));
+      for (let i = 0; i < steps; i++) tone(520 * Math.pow(1.12, i), 0.07, { type: "triangle", vol: 0.1, delay: i * 0.035 });
+    },
+    flag: () => { tone(660, 0.06, { type: "square", vol: 0.1 }); tone(990, 0.08, { type: "square", vol: 0.1, delay: 0.05 }); },
+    unflag: () => tone(500, 0.08, { type: "square", vol: 0.09, slide: -200 }),
+    chord: () => { tone(740, 0.05, { type: "triangle", vol: 0.14 }); tone(1110, 0.06, { type: "triangle", vol: 0.12, delay: 0.04 }); },
+    deny: () => tone(180, 0.09, { type: "sawtooth", vol: 0.08 }),
+    boom(big = true) {
+      noise(big ? 0.9 : 0.35, { vol: big ? 0.9 : 0.35, from: big ? 2400 : 1600, to: 60 });
+      tone(big ? 110 : 160, big ? 0.6 : 0.25, { type: "sine", vol: big ? 0.6 : 0.25, slide: -80 });
+    },
+    lose() { [392, 330, 262, 196].forEach((f, i) => tone(f, 0.22, { type: "triangle", vol: 0.16, delay: 0.5 + i * 0.18 })); },
+    win() {
+      const notes = [523, 659, 784, 1047, 784, 1047, 1319];
+      notes.forEach((f, i) => tone(f, i === notes.length - 1 ? 0.5 : 0.13, { type: "square", vol: 0.11, delay: i * 0.11 }));
+      notes.forEach((f, i) => tone(f / 2, 0.12, { type: "triangle", vol: 0.12, delay: i * 0.11 }));
+    },
+  };
+})();
+
+// ---------- логика ----------
+const LEVELS = [
+  { name: "Лёгкий", cols: 9, rows: 9, mines: 10 },
+  { name: "Средний", cols: 16, rows: 16, mines: 40 },
+  { name: "Профи", cols: 30, rows: 16, mines: 99 },
+];
+const NUM_COLORS = ["", "#6aa8ff", "#5fdc7a", "#ff6b6b", "#c193ff", "#ffb347", "#5ff0f0", "#ffffff", "#b4b4c8"];
+let level = 0, cols, rows, mines, grid, state, started, startTime, endTime, flags, opened, flagMode = false, boomCell = null;
+try { level = Math.min(2, +localStorage.getItem("takopi-mines-level") || 0); } catch (e) {}
+
+const $ = id => document.getElementById(id);
+const cv = $("field"), g = cv.getContext("2d");
+const inside = (c, r) => c >= 0 && r >= 0 && c < cols && r < rows;
+function around(c, r, fn) { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && inside(c + dx, r + dy)) fn(c + dx, r + dy); }
+const bestKey = () => "takopi-mines-best-" + level;
+function getBest() { try { return +localStorage.getItem(bestKey()) || 0; } catch (e) { return 0; } }
+
+function newGame() {
+  const L = LEVELS[level];
+  // на вертикальном экране большое поле поворачиваем: 16x30 вместо 30x16
+  const portrait = innerHeight > innerWidth * 1.1;
+  cols = portrait && L.cols > L.rows ? L.rows : L.cols;
+  rows = portrait && L.cols > L.rows ? L.cols : L.rows;
+  mines = L.mines;
+  grid = Array.from({ length: rows }, () => Array.from({ length: cols }, () =>
+    ({ mine: false, open: false, flag: false, n: 0, openAt: 0, flagAt: 0 })));
+  state = "play"; started = false; startTime = 0; endTime = 0; flags = 0; opened = 0; boomCell = null;
+  particles = []; confetti = []; shake = 0;
+  document.querySelectorAll("#levels button").forEach(b => b.setAttribute("aria-pressed", +b.dataset.l === level));
+  $("face").className = "face";
+  setStatus();
+  layout();
+}
+function placeMines(safeC, safeR) {
+  let left = mines;
+  while (left > 0) {
+    const c = Math.floor(Math.random() * cols), r = Math.floor(Math.random() * rows);
+    if (grid[r][c].mine || (Math.abs(c - safeC) <= 1 && Math.abs(r - safeR) <= 1)) continue;
+    grid[r][c].mine = true; left--;
+  }
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { let n = 0; around(c, r, (x, y) => { n += grid[y][x].mine; }); grid[r][c].n = n; }
+}
+// открытие волной: BFS, у каждой клетки своя задержка по расстоянию от точки нажатия
+function openFrom(c0, r0, now) {
+  const queue = [[c0, r0, 0]];
+  let count = 0;
+  while (queue.length) {
+    const [x, y, d] = queue.shift(), cell = grid[y][x];
+    if (cell.open || cell.flag) continue;
+    cell.open = true; cell.openAt = now + d * 28; opened++; count++;
+    if (cell.mine) { boomCell = [x, y]; lose(now); return count; }
+    if (cell.n === 0) around(x, y, (a, b) => { if (!grid[b][a].open) queue.push([a, b, d + 1]); });
+  }
+  return count;
+}
+function checkWin(now) { if (state === "play" && opened === cols * rows - mines) win(now); }
+function reveal(c, r) {
+  if (state !== "play") return;
+  const now = performance.now(), cell = grid[r][c];
+  if (cell.flag) return Sound.deny();
+  if (!started) { started = true; startTime = now; placeMines(c, r); }
+  if (cell.open) {
+    if (!cell.n) return;
+    let f = 0; around(c, r, (x, y) => { f += grid[y][x].flag; });
+    if (f !== cell.n) return Sound.deny();
+    let n = 0;
+    around(c, r, (x, y) => { if (state === "play" && !grid[y][x].open && !grid[y][x].flag) n += openFrom(x, y, now); });
+    if (state === "play" && n) { Sound.chord(); checkWin(now); }
+    return;
+  }
+  const n = openFrom(c, r, now);
+  if (state === "play") { n > 1 ? Sound.open(n) : Sound.click(); checkWin(now); }
+}
+function toggleFlag(c, r) {
+  const cell = grid[r][c];
+  if (cell.open || state !== "play") return;
+  cell.flag = !cell.flag; cell.flagAt = performance.now(); flags += cell.flag ? 1 : -1;
+  cell.flag ? Sound.flag() : Sound.unflag();
+  if (navigator.vibrate) navigator.vibrate(cell.flag ? 18 : 8);
+}
+function lose(now) {
+  state = "lost"; endTime = now; shake = 1;
+  Sound.boom(true); Sound.lose();
+  burst(boomCell[0], boomCell[1], 46, ["#ffd84a", "#ff9a3c", "#ff4d5e", "#ffffff"]);
+  // остальные мины взрываются по очереди, от ближних к дальним
+  const rest = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++)
+    if (grid[r][c].mine && !grid[r][c].flag && !(c === boomCell[0] && r === boomCell[1])) rest.push([c, r, Math.hypot(c - boomCell[0], r - boomCell[1])]);
+  rest.sort((a, b) => a[2] - b[2]).forEach(([c, r], i) => {
+    const at = 260 + i * Math.max(25, 700 / rest.length);
+    grid[r][c].openAt = now + at; grid[r][c].open = true;
+    setTimeout(() => { if (state === "lost") { burst(c, r, 10, ["#ff9a3c", "#ffd84a"]); if (i < 12) Sound.boom(false); } }, at);
+  });
+  $("face").className = "face lost";
+  if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
+  setStatus();
+}
+function win(now) {
+  state = "won"; endTime = now;
+  for (const row of grid) for (const cell of row) if (cell.mine && !cell.flag) { cell.flag = true; cell.flagAt = now; }
+  flags = mines;
+  const secs = Math.max(1, Math.round((endTime - startTime) / 1000)), best = getBest();
+  newRecord = !best || secs < best;
+  if (newRecord) try { localStorage.setItem(bestKey(), secs); } catch (e) {}
+  Sound.win();
+  for (let i = 0; i < 140; i++) confetti.push({ x: Math.random() * cssW, y: -20 - Math.random() * cssH * 0.6, vx: (Math.random() - 0.5) * 60,
+    vy: 60 + Math.random() * 120, r: Math.random() * 6, vr: (Math.random() - 0.5) * 8, s: 4 + Math.random() * 5,
+    c: ["#ff7eb6", "#ffd84a", "#6aa8ff", "#5fdc7a", "#c193ff"][i % 5] });
+  $("face").className = "face won";
+  setStatus();
+}
+let newRecord = false;
+function setStatus() {
+  const s = $("status"), best = getBest();
+  if (state === "won") s.innerHTML = `Победа за <b>${Math.max(1, Math.round((endTime - startTime) / 1000))} с</b>` + (newRecord ? " — <b>новый рекорд!</b>" : best ? `, рекорд ${best} с` : "");
+  else if (state === "lost") s.innerHTML = "Ба-бах, пи! Нажми на Такопи, чтобы сыграть ещё";
+  else s.textContent = (best ? `Рекорд: ${best} с · ` : "") + "Долгое нажатие или правая кнопка — флажок";
+}
+
+// ---------- размеры и отрисовка ----------
+let cell = 30, cssW = 0, cssH = 0, dpr = 1;
+function layout() {
+  const availW = Math.min(innerWidth - 48, 1060), availH = innerHeight - 250;
+  cell = Math.max(16, Math.min(44, Math.floor(Math.min(availW / cols, availH / rows))));
+  cssW = cell * cols; cssH = cell * rows;
+  dpr = Math.min(3, window.devicePixelRatio || 1);
+  cv.style.width = cssW + "px"; cv.style.height = cssH + "px";
+  cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
+}
+addEventListener("resize", () => { if (!started) newGame(); else layout(); });
+
+function rr(x, y, w, h, r) { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); }
+let particles = [], confetti = [], shake = 0, hover = null, pressed = null, last = performance.now();
+function burst(c, r, n, colors) {
+  const cx = (c + 0.5) * cell, cy = (r + 0.5) * cell;
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, v = 40 + Math.random() * 220;
+    particles.push({ x: cx, y: cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.5 + Math.random() * 0.6, t: 0, s: 2 + Math.random() * 3, c: colors[i % colors.length] });
+  }
+}
+const ease = t => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
+
+function drawClosed(x, y, s, hot, down) {
+  const p = Math.max(1, s * 0.05);
+  const grad = g.createLinearGradient(x, y, x, y + s);
+  grad.addColorStop(0, down ? "#6a5bb0" : hot ? "#9c8cf0" : "#8a7ae0");
+  grad.addColorStop(1, down ? "#5a4ba0" : hot ? "#7a68d6" : "#6a58c4");
+  rr(x + p, y + p, s - 2 * p, s - 2 * p, s * 0.18); g.fillStyle = grad; g.fill();
+  if (!down) { g.fillStyle = "rgba(255,255,255,0.18)"; rr(x + p * 2, y + p * 2, s - 4 * p, s * 0.32, s * 0.14); g.fill(); }
+}
+function drawFlag(x, y, s, t) {
+  const k = s / 30, wave = Math.sin(t / 180) * 1.5 * k;
+  g.fillStyle = "#2a2340"; g.fillRect(x + 12 * k, y + 7 * k, 2.4 * k, 16 * k);
+  g.fillRect(x + 8 * k, y + 22 * k, 11 * k, 2.6 * k);
+  g.beginPath(); g.moveTo(x + 14 * k, y + 7 * k);
+  g.quadraticCurveTo(x + 19 * k, y + 8 * k + wave, x + 23 * k, y + 11 * k);
+  g.lineTo(x + 14 * k, y + 16 * k); g.closePath();
+  g.fillStyle = "#ff5f9e"; g.fill();
+}
+function drawMine(x, y, s) {
+  const cx = x + s / 2, cy = y + s / 2, r = s * 0.24;
+  g.strokeStyle = "#141225"; g.lineWidth = Math.max(1.5, s * 0.07); g.lineCap = "round";
+  for (let i = 0; i < 4; i++) {
+    const a = i * Math.PI / 4;
+    g.beginPath(); g.moveTo(cx - Math.cos(a) * r * 1.55, cy - Math.sin(a) * r * 1.55); g.lineTo(cx + Math.cos(a) * r * 1.55, cy + Math.sin(a) * r * 1.55); g.stroke();
+  }
+  const grad = g.createRadialGradient(cx - r * 0.35, cy - r * 0.35, r * 0.1, cx, cy, r);
+  grad.addColorStop(0, "#6b6890"); grad.addColorStop(1, "#141225");
+  g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fillStyle = grad; g.fill();
+  g.beginPath(); g.arc(cx - r * 0.35, cy - r * 0.35, r * 0.22, 0, Math.PI * 2); g.fillStyle = "rgba(255,255,255,0.8)"; g.fill();
+}
+
+function frame() {
+  // время берём из performance.now(), как и при клике, иначе анимации и таймер расходятся
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, cssW, cssH);
+  if (shake > 0) { shake = Math.max(0, shake - dt * 2.2); g.translate((Math.random() - 0.5) * 14 * shake, (Math.random() - 0.5) * 14 * shake); }
+  g.fillStyle = "#16132e"; g.fillRect(-20, -20, cssW + 40, cssH + 40);
+
+  const s = cell;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const it = grid[r][c], x = c * s, y = r * s;
+    const shown = it.open && now >= it.openAt;
+    if (!shown) {
+      const hot = state === "play" && hover && hover[0] === c && hover[1] === r;
+      const down = state === "play" && pressed && pressed[0] === c && pressed[1] === r && !it.flag;
+      drawClosed(x, y, s, hot, down);
+      if (it.flag) {
+        const k = ease((now - it.flagAt) / 220);   // флажок «втыкается» с отскоком
+        g.save(); g.translate(x + s / 2, y + s); g.scale(1, 0.6 + 0.4 * k + Math.sin(k * Math.PI) * 0.15); g.translate(-x - s / 2, -y - s);
+        drawFlag(x, y, s, now + c * 90); g.restore();
+        if (state === "lost" && !it.mine) {   // флажок мимо мины
+          g.strokeStyle = "#ff4d5e"; g.lineWidth = Math.max(2, s * 0.08);
+          g.beginPath(); g.moveTo(x + s * 0.25, y + s * 0.25); g.lineTo(x + s * 0.75, y + s * 0.75); g.moveTo(x + s * 0.75, y + s * 0.25); g.lineTo(x + s * 0.25, y + s * 0.75); g.stroke();
+        }
+      }
+    } else {
+      const k = ease((now - it.openAt) / 160);
+      const boom = boomCell && boomCell[0] === c && boomCell[1] === r;
+      g.fillStyle = boom ? "#ff4d5e" : it.mine ? "#3a2440" : (c + r) % 2 ? "#26224a" : "#2a2650";
+      g.fillRect(x, y, s, s);
+      g.strokeStyle = "rgba(255,255,255,0.05)"; g.lineWidth = 1; g.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+      g.save(); g.globalAlpha = k; g.translate(x + s / 2, y + s / 2); g.scale(0.6 + 0.4 * k, 0.6 + 0.4 * k); g.translate(-x - s / 2, -y - s / 2);
+      if (it.mine) drawMine(x, y, s);
+      else if (it.n) {
+        g.font = `800 ${Math.round(s * 0.6)}px system-ui, "Segoe UI", Roboto, sans-serif`;
+        g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = NUM_COLORS[it.n];
+        g.shadowColor = NUM_COLORS[it.n]; g.shadowBlur = s * 0.25;
+        g.fillText(it.n, x + s / 2, y + s / 2 + s * 0.04);
+        g.shadowBlur = 0;
+      }
+      g.restore();
+      // «отпечаток» закрытой плитки исчезает поверх — плавное открытие
+      if (k < 1) { g.globalAlpha = 1 - k; drawClosed(x, y, s, false, true); g.globalAlpha = 1; }
+    }
+  }
+  particles.forEach(p => { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 300 * dt; p.vx *= 0.98; });
+  particles = particles.filter(p => p.t < p.life);
+  particles.forEach(p => { g.globalAlpha = 1 - p.t / p.life; g.fillStyle = p.c; g.beginPath(); g.arc(p.x, p.y, p.s, 0, Math.PI * 2); g.fill(); });
+  confetti.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt; });
+  confetti = confetti.filter(p => p.y < cssH + 20);
+  confetti.forEach(p => { g.globalAlpha = 1; g.save(); g.translate(p.x, p.y); g.rotate(p.r); g.fillStyle = p.c; g.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); g.restore(); });
+  g.globalAlpha = 1;
+
+  $("minesLed").textContent = String(Math.max(-99, mines - flags)).padStart(3, "0");
+  const secs = started ? Math.max(0, Math.floor(((state === "play" ? now : endTime) - startTime) / 1000)) : 0;
+  $("timeLed").textContent = String(Math.min(999, secs)).padStart(3, "0");
+  requestAnimationFrame(frame);
+}
+
+// ---------- ввод ----------
+function cellAt(e) {
+  const r = cv.getBoundingClientRect();
+  const c = Math.floor((e.clientX - r.left) / cell), row = Math.floor((e.clientY - r.top) / cell);
+  return inside(c, row) ? [c, row] : null;
+}
+let longT = null, longDone = false, downAt = null;
+cv.addEventListener("pointerdown", e => {
+  Sound.unlock();
+  const at = cellAt(e);
+  if (!at || state !== "play") return;
+  if (e.button === 2) { toggleFlag(...at); longDone = true; return; }
+  pressed = at; downAt = [e.clientX, e.clientY]; longDone = false;
+  if (state === "play") $("face").className = "face press";
+  clearTimeout(longT);
+  longT = setTimeout(() => { if (pressed) { toggleFlag(...pressed); longDone = true; pressed = null; } }, 380);
+});
+cv.addEventListener("pointermove", e => {
+  hover = cellAt(e);
+  if (downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 10) { clearTimeout(longT); pressed = null; }
+});
+cv.addEventListener("pointerleave", () => { hover = null; });
+addEventListener("pointerup", e => {
+  clearTimeout(longT);
+  if (e.pointerType !== "mouse") hover = null;
+  if (state === "play") $("face").className = "face";
+  const at = pressed; pressed = null; downAt = null;
+  if (longDone || !at || e.button === 2) { longDone = false; return; }
+  const now = cellAt(e);
+  if (!now || now[0] !== at[0] || now[1] !== at[1]) return;
+  if (flagMode && !grid[at[1]][at[0]].open) toggleFlag(...at); else reveal(...at);
+});
+addEventListener("contextmenu", e => e.preventDefault());
+$("face").addEventListener("click", () => { Sound.unlock(); Sound.click(); newGame(); });
+document.querySelectorAll("#levels button").forEach(b => b.addEventListener("click", () => {
+  level = +b.dataset.l; try { localStorage.setItem("takopi-mines-level", level); } catch (e) {}
+  Sound.unlock(); Sound.click(); newGame();
+}));
+function setMode(v) { flagMode = v; $("mode").setAttribute("aria-pressed", v); $("mode").textContent = v ? "🚩 Флажки" : "⛏ Открывать"; }
+$("mode").addEventListener("click", () => { setMode(!flagMode); Sound.unlock(); Sound.click(); });
+function setSound(v) { Sound.on = v; $("sound").setAttribute("aria-pressed", v); $("sound").textContent = v ? "🔊" : "🔇"; }
+$("sound").addEventListener("click", () => { setSound(!Sound.on); if (Sound.on) Sound.flag(); });
+setSound(Sound.on);
+addEventListener("keydown", e => {
+  if (e.code === "KeyR" || e.code === "F2") { Sound.unlock(); newGame(); }
+  if (e.code === "KeyF") setMode(!flagMode);
+  if (e.code === "KeyM") setSound(!Sound.on);
+});
+
+function showRules(v) { $("rules").classList.toggle("open", v); }
+$("rulesBtn").addEventListener("click", () => { Sound.unlock(); Sound.click(); showRules(true); });
+$("rules").addEventListener("click", e => { if (e.target.id === "rules" || e.target.id === "rulesOk") showRules(false); });
+addEventListener("keydown", e => { if (e.code === "Escape") showRules(false); });
+try { if (!new URLSearchParams(location.search).has("play") && !localStorage.getItem("takopi-rules-seen-mines")) { showRules(true); localStorage.setItem("takopi-rules-seen-mines", "1"); } } catch (e) {}
+
+newGame();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

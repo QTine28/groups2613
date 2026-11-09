@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Игры Такопи</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
+<style>
+:root { --bg: #0d0d1a; --card: #1b1b3a; --pink: #ff7eb6; --pinkD: #d9488f; --ink: #f4f1ff; --muted: #a9a6c9; --yellow: #ffd84a; --line: #2d2a5a; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 980px; margin: 0 auto; padding: 28px 16px 48px; }
+h1 { font: 20px/1.5 "Press Start 2P", monospace; color: var(--pink); margin: 0 0 6px; text-shadow: 2px 2px 0 #000; }
+.lead { color: var(--muted); margin: 0 0 24px; max-width: 640px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 14px; }
+a.card { display: flex; flex-direction: column; gap: 8px; text-decoration: none; color: inherit; background: var(--card);
+  border: 2px solid var(--line); border-radius: 6px; padding: 16px; box-shadow: 4px 4px 0 #000; transition: transform .1s, border-color .1s; }
+a.card:hover { transform: translate(-2px, -2px); border-color: var(--pink); box-shadow: 6px 6px 0 #000; }
+.top { display: flex; align-items: center; gap: 12px; }
+.icon { font-size: 30px; width: 44px; height: 44px; display: grid; place-items: center; background: #0d0d1a; border-radius: 4px; }
+.name { font: 11px/1.6 "Press Start 2P", monospace; color: var(--ink); }
+.genre { color: var(--muted); font-size: 13px; }
+.desc { margin: 0; color: var(--ink); font-size: 14px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+.tag { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: #0d0d1a; color: var(--muted); }
+.tag.easy { color: #5ee36a; } .tag.mid { color: var(--yellow); } .tag.hard { color: #ff9a3c; }
+.play { font: 9px "Press Start 2P", monospace; color: var(--yellow); margin-left: auto; align-self: center; }
+.note { margin-top: 28px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>ИГРЫ ТАКОПИ</h1>
+  <p class="lead">Игры в духе Денди и Сеги с Такопи в главной роли: чёткая графика, анимации и звук (кнопка 🔊 справа вверху). На телефоне — тапы и свайпы, на компьютере — стрелки и пробел. Рекорд каждой игры запоминается.</p>
+  <div class="grid">
+    <a class="card" href="run.html"><div class="top"><div class="icon">🏃</div><div><div class="name">Такопи-бег</div><div class="genre">Бесконечный бег</div></div></div>
+      <p class="desc">Ночной город, Такопи бежит и перепрыгивает конусы, ящики и птиц. Скорость растёт, печеньки дают очки.</p>
+      <div class="meta"><span class="tag easy">делать легко</span><span class="tag">тап — прыжок</span><span class="play">ИГРАТЬ ▶</span></div></a>
+    <a class="card" href="space.html"><div class="top"><div class="icon">🚀</div><div><div class="name">Такопи в космосе</div><div class="genre">Космическая стрелялка</div></div></div>
+      <p class="desc">Летающая тарелка стреляет сама, ты уводишь её от астероидов и пришельцев. Жёлтый бонус — тройной выстрел.</p>
+      <div class="meta"><span class="tag mid">делать средне</span><span class="tag">веди пальцем</span><span class="play">ИГРАТЬ ▶</span></div></a>
+    <a class="card" href="bricks.html"><div class="top"><div class="icon">🧱</div><div><div class="name">Разбивалка</div><div class="genre">Разбивалка блоков</div></div></div>
+      <p class="desc">Отбивай мяч платформой и разбивай кирпичи. Уровни меняют узор, печенька делает платформу шире.</p>
+      <div class="meta"><span class="tag easy">делать легко</span><span class="tag">веди пальцем</span><span class="play">ИГРАТЬ ▶</span></div></a>
+    <a class="card" href="snake.html"><div class="top"><div class="icon">🐍</div><div><div class="name">Такопи-змейка</div><div class="genre">Змейка</div></div></div>
+      <p class="desc">Собирай печеньки и расти хвостом. Иногда появляется золотая печенька: +3 к длине и +50 очков.</p>
+      <div class="meta"><span class="tag easy">делать очень легко</span><span class="tag">свайпы</span><span class="play">ИГРАТЬ ▶</span></div></a>
+    <a class="card" href="race.html"><div class="top"><div class="icon">🏎</div><div><div class="name">Такопи-гонки</div><div class="genre">Гонки, вид сверху</div></div></div>
+      <p class="desc">Три полосы, машины навстречу, скорость растёт. Молния включает турбо: в турбо можно таранить.</p>
+      <div class="meta"><span class="tag mid">делать средне</span><span class="tag">тап влево/вправо</span><span class="play">ИГРАТЬ ▶</span></div></a>
+    <a class="card" href="mines.html"><div class="top"><div class="icon">💣</div><div><div class="name">Такопи-сапёр</div><div class="genre">Сапёр</div></div></div>
+      <p class="desc">Классические правила: первый ход безопасен, цифры показывают мины вокруг, тап по цифре открывает соседей. Три уровня и лучшее время.</p>
+      <div class="meta"><span class="tag easy">делать легко</span><span class="tag">долгий тап — флажок</span><span class="play">ИГРАТЬ ▶</span></div></a>
+  </div>
+  <p class="note">Для Telegram: рекорды можно сделать общей таблицей прямо в чате.</p>
+</main>
+</body>
+</html>
