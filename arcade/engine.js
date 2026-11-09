@@ -435,29 +435,31 @@ function run(game) {
   const SCORE_CAP = { run: 100000, space: 500000, bricks: 500000, snake: 10000, race: 100000 };
   const BOT_USERNAME = "SuperRasulBot";
 
-  function openLink(url) {
-    const TG = window.Telegram && window.Telegram.WebApp;
-    try {
-      if (TG && TG.openTelegramLink) { TG.openTelegramLink(url); return; }
-    } catch (e) {}
-    window.open(url, "_blank");
-  }
-
   let bannerEl = null;
   function showBanner(id, n) {
     if (bannerEl) bannerEl.remove();
+    const url = "https://t.me/" + BOT_USERNAME + "?start=score-" + encodeURIComponent(id) + "-" + n;
     bannerEl = document.createElement("div");
     bannerEl.className = "tg-submit";
-    bannerEl.innerHTML = '<div class="tg-submit-txt">\u{1f3c6} Новый рекорд: <b>' + n + '</b></div>' +
-      '<button class="tg-submit-btn" type="button">\u{1f4e4} Отправить в чат</button>';
+    bannerEl.innerHTML =
+      '<div class="tg-submit-txt">\u{1f3c6} Новый рекорд: <b>' + n + '</b></div>' +
+      '<a class="tg-submit-btn" href="' + url + '" target="_blank" rel="noopener">\u{1f4e4} Отправить в чат</a>';
     document.body.appendChild(bannerEl);
-    const btn = bannerEl.querySelector("button");
-    btn.addEventListener("click", () => {
-      const url = "https://t.me/" + BOT_USERNAME + "?start=score-" + encodeURIComponent(id) + "-" + n;
-      openLink(url);
-      bannerEl.querySelector(".tg-submit-txt").textContent = "✓ Рекорд отправлен";
-      btn.remove();
-      setTimeout(() => { if (bannerEl) { bannerEl.remove(); bannerEl = null; } }, 1800);
+    const link = bannerEl.querySelector("a");
+    link.addEventListener("click", () => {
+      // в Telegram Mini App пробуем родной openTelegramLink — он открывает диалог без перехода
+      const TG = window.Telegram && window.Telegram.WebApp;
+      try {
+        if (TG && TG.openTelegramLink) { TG.openTelegramLink(url); }
+      } catch (e) {}
+      // пометим как отправленный после клика (даже если браузер открыл внешне)
+      setTimeout(() => {
+        if (!bannerEl) return;
+        const t = bannerEl.querySelector(".tg-submit-txt");
+        if (t) t.textContent = "✓ Рекорд отправлен";
+        link.remove();
+        setTimeout(() => { if (bannerEl) { bannerEl.remove(); bannerEl = null; } }, 1800);
+      }, 100);
     });
   }
 

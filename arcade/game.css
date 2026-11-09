@@ -39,9 +39,11 @@ canvas { display: block; touch-action: none; box-shadow: 0 20px 60px rgba(0, 0, 
 .tg-submit-txt { text-align: center; }
 .tg-submit-txt b { color: #ffd84a; font-weight: 900; font-size: 18px; margin-left: 4px; }
 .tg-submit-btn {
+  display: inline-block; text-decoration: none;
   border: 0; border-radius: 12px; padding: 9px 16px; cursor: pointer;
   background: #ff7eb6; color: #fff;
   font: 800 14px "Rubik", system-ui, sans-serif;
   transition: background 0.15s;
 }
+.tg-submit-btn:hover, .tg-submit-btn:visited { color: #fff; }
 .tg-submit-btn:hover { background: #e0559a; }
