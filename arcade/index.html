@@ -4,6 +4,30 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Игры Такопи</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+// Если открыли как Mini App через t.me/<бот>/arcade?startapp=<игра>, уходим на страницу этой игры
+(function () {
+  var allowed = { run: 1, mines: 1, space: 1, bricks: 1, snake: 1, race: 1 };
+  var target = null;
+  try {
+    var TG = window.Telegram && window.Telegram.WebApp;
+    if (TG) {
+      TG.ready();
+      TG.expand();
+      target = (TG.initDataUnsafe && TG.initDataUnsafe.start_param) || null;
+    }
+  } catch (e) {}
+  if (!target) {
+    // fallback: ?game=run в обычном URL
+    var p = new URLSearchParams(location.search).get("game");
+    if (p) target = p;
+  }
+  if (target && allowed[String(target).toLowerCase()]) {
+    location.replace(String(target).toLowerCase() + ".html");
+  }
+})();
+</script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
 <style>
 :root { --bg: #0d0d1a; --card: #1b1b3a; --pink: #ff7eb6; --pinkD: #d9488f; --ink: #f4f1ff; --muted: #a9a6c9; --yellow: #ffd84a; --line: #2d2a5a; }
