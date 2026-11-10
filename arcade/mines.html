@@ -80,6 +80,15 @@ canvas { display: block; touch-action: none; cursor: pointer; }
 .rules-card .goal { margin: 0; }
 .rules-card ul { margin: 0; padding-left: 20px; color: #d9d4ff; }
 .rules-card li { margin: 3px 0; }
+/* баннер отправки рекорда в топ бота — как .tg-submit в game.css */
+.tg-submit { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 40;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 14px 12px; border-radius: 16px; min-width: 220px;
+  background: linear-gradient(180deg, rgba(30, 26, 64, 0.96), rgba(14, 12, 34, 0.96)); color: #f6f3ff; font: 700 14px system-ui, sans-serif;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.12); }
+.tg-submit-txt { text-align: center; }
+.tg-submit-txt b { color: #ffd84a; font-weight: 900; font-size: 18px; margin-left: 4px; }
+.tg-submit-btn { display: inline-block; text-decoration: none; border-radius: 12px; padding: 10px 18px; background: var(--pink); color: #fff; font: 800 14px system-ui, sans-serif; }
+.tg-submit-btn:hover { background: var(--pinkD); }
 .rules-ok { margin-top: 18px; width: 100%; border: 0; border-radius: 12px; padding: 12px; cursor: pointer;
   background: var(--pinkD); color: #fff; font: 800 16px system-ui, sans-serif; }
 </style>
@@ -148,7 +157,7 @@ canvas { display: block; touch-action: none; cursor: pointer; }
       <li>Счётчик слева — сколько мин осталось без флажка, справа — время</li>
     </ul>
     <h3>Уровни</h3>
-    <ul><li>Лёгкий 9×9 — 10 мин · Средний 16×16 — 40 мин · Профи 30×16 — 99 мин</li><li>Лучшее время запоминается для каждого уровня</li></ul>
+    <ul><li>Лёгкий 9×9 — 10 мин · Средний 16×16 — 40 мин · Профи 30×16 — 99 мин</li><li>Лучшее время запоминается для каждого уровня</li><li>Побил свой рекорд — жми «Отправить в топ», и время попадёт в /tops бота</li></ul>
     <button class="rules-ok" id="rulesOk">Понятно, играем!</button>
   </div>
 </div>
@@ -225,8 +234,43 @@ const $ = id => document.getElementById(id);
 const cv = $("field"), g = cv.getContext("2d"), view = $("view");
 const inside = (c, r) => c >= 0 && r >= 0 && c < cols && r < rows;
 function around(c, r, fn) { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && inside(c + dx, r + dy)) fn(c + dx, r + dy); }
-const bestKey = () => "takopi-mines-best-" + level;
-function getBest() { try { return +localStorage.getItem(bestKey()) || 0; } catch (e) { return 0; } }
+// рекорд — в десятых секунды (как и в топе бота); старый рекорд в целых секундах переносим ×10
+const bestKey = () => "takopi-mines-best10-" + level;
+function getBest() {
+  try {
+    let b = +localStorage.getItem(bestKey()) || 0;
+    if (!b) { b = (+localStorage.getItem("takopi-mines-best-" + level) || 0) * 10; if (b) localStorage.setItem(bestKey(), b); }
+    return b;
+  } catch (e) { return 0; }
+}
+const fmtTime = ds => (ds / 10).toFixed(1) + " с";
+const runDs = () => Math.max(1, Math.round((endTime - startTime) / 100));
+
+// ---------- отправка рекорда в топ бота (/tops) ----------
+// как в engine.js: кнопка открывает бота по ссылке t.me/<бот>?start=score-mines-<уровень>-<десятые секунды>
+const BOT_USERNAME = "SuperRasulBot";
+let bannerEl = null;
+function hideBanner() { if (bannerEl) { bannerEl.remove(); bannerEl = null; } }
+function showBanner(ds) {
+  hideBanner();
+  const url = "https://t.me/" + BOT_USERNAME + "?start=score-mines-" + level + "-" + ds;
+  bannerEl = document.createElement("div");
+  bannerEl.className = "tg-submit";
+  bannerEl.innerHTML = '<div class="tg-submit-txt">🏆 ' + LEVELS[level].name + ': <b>' + fmtTime(ds) + '</b></div>' +
+    '<a class="tg-submit-btn" href="' + url + '" target="_blank" rel="noopener">📤 Отправить в топ</a>';
+  document.body.appendChild(bannerEl);
+  const link = bannerEl.querySelector("a");
+  link.addEventListener("click", () => {
+    const TG = window.Telegram && window.Telegram.WebApp;
+    try { if (TG && TG.openTelegramLink) TG.openTelegramLink(url); } catch (e) {}
+    setTimeout(() => {
+      if (!bannerEl) return;
+      bannerEl.querySelector(".tg-submit-txt").textContent = "✓ Рекорд отправлен";
+      link.remove();
+      setTimeout(hideBanner, 1800);
+    }, 100);
+  });
+}
 
 function newGame() {
   const L = LEVELS[level];
@@ -238,7 +282,7 @@ function newGame() {
   grid = Array.from({ length: rows }, () => Array.from({ length: cols }, () =>
     ({ mine: false, open: false, flag: false, n: 0, openAt: 0, flagAt: 0 })));
   state = "play"; started = false; startTime = 0; endTime = 0; flags = 0; opened = 0; boomCell = null;
-  particles = []; confetti = []; shake = 0;
+  particles = []; confetti = []; shake = 0; hideBanner();
   document.querySelectorAll("#levels button").forEach(b => b.setAttribute("aria-pressed", +b.dataset.l === level));
   $("face").className = "face";
   setStatus();
@@ -313,9 +357,9 @@ function win(now) {
   state = "won"; endTime = now;
   for (const row of grid) for (const cell of row) if (cell.mine && !cell.flag) { cell.flag = true; cell.flagAt = now; }
   flags = mines;
-  const secs = Math.max(1, Math.round((endTime - startTime) / 1000)), best = getBest();
-  newRecord = !best || secs < best;
-  if (newRecord) try { localStorage.setItem(bestKey(), secs); } catch (e) {}
+  const ds = runDs(), best = getBest();
+  newRecord = !best || ds < best;
+  if (newRecord) { try { localStorage.setItem(bestKey(), ds); } catch (e) {} showBanner(ds); }
   Sound.win();
   for (let i = 0; i < 140; i++) confetti.push({ x: Math.random() * cssW, y: -20 - Math.random() * cssH * 0.6, vx: (Math.random() - 0.5) * 60,
     vy: 60 + Math.random() * 120, r: Math.random() * 6, vr: (Math.random() - 0.5) * 8, s: 4 + Math.random() * 5,
@@ -326,9 +370,9 @@ function win(now) {
 let newRecord = false;
 function setStatus() {
   const s = $("status"), best = getBest();
-  if (state === "won") s.innerHTML = `Победа за <b>${Math.max(1, Math.round((endTime - startTime) / 1000))} с</b>` + (newRecord ? " — <b>новый рекорд!</b>" : best ? `, рекорд ${best} с` : "");
+  if (state === "won") s.innerHTML = `Победа за <b>${fmtTime(runDs())}</b>` + (newRecord ? " — <b>новый рекорд!</b>" : best ? `, рекорд ${fmtTime(best)}` : "");
   else if (state === "lost") s.innerHTML = "Ба-бах, пи! Нажми на Такопи, чтобы сыграть ещё";
-  else s.textContent = (best ? `Рекорд: ${best} с · ` : "") + "Долгое нажатие или правая кнопка — флажок";
+  else s.textContent = (best ? `Рекорд: ${fmtTime(best)} · ` : "") + "Долгое нажатие или правая кнопка — флажок";
 }
 
 // ---------- размеры и отрисовка ----------
