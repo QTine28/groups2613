@@ -112,7 +112,7 @@ canvas { display: block; touch-action: none; cursor: pointer; }
       <li>Долгое нажатие / правая кнопка — флажок «здесь мина» (ещё раз — снять)</li>
       <li>Кнопка «⛏ Открывать / 🚩 Флажки» — переключает, что делает обычный тап</li>
       <li>Тап по цифре, вокруг которой уже стоят все её флажки, — открывает остальных соседей разом</li>
-      <li>Щипок двумя пальцами, кнопки «− / +» или Ctrl+колесо — приблизить поле; перетаскивай поле пальцем, чтобы двигать его</li>
+      <li>Щипок двумя пальцами, колесо мыши или кнопки «− / +» — приблизить поле; перетаскивай поле пальцем, чтобы двигать его</li>
       <li>Такопи сверху или клавиша R — новая игра</li>
     </ul>
     <h3>Правила</h3>
@@ -502,10 +502,23 @@ addEventListener("pointerup", e => {
   if (flagMode && !grid[at[1]][at[0]].open) toggleFlag(...at); else reveal(...at);
 });
 cv.addEventListener("wheel", e => {
-  if (!e.ctrlKey) return;   // обычное колесо прокручивает поле, Ctrl+колесо — зум
+  // колесо над полем — зум к курсору; плавно и для тачпада, и для мыши (deltaMode 1 — строки)
   e.preventDefault();
-  setZoom(zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX, e.clientY);
+  const dy = Math.max(-120, Math.min(120, e.deltaY * (e.deltaMode === 1 ? 40 : 1)));
+  setZoom(zoom * Math.exp(-dy * 0.002), e.clientX, e.clientY);
 }, { passive: false });
+// iOS/Telegram: не отдаём жесты пальцами странице и окну мини-аппа, иначе щипок масштабирует/сворачивает их
+cv.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
+["gesturestart", "gesturechange"].forEach(t => document.addEventListener(t, e => e.preventDefault()));
+try {
+  const TG = window.Telegram && window.Telegram.WebApp;
+  if (TG) {
+    TG.ready(); TG.expand();
+    if (TG.disableVerticalSwipes) TG.disableVerticalSwipes();
+    if (TG.setHeaderColor) TG.setHeaderColor("#15132b");
+    if (TG.setBackgroundColor) TG.setBackgroundColor("#15132b");
+  }
+} catch (e) {}
 $("zoomIn").addEventListener("click", () => { Sound.unlock(); Sound.click(); setZoom(zoom * 1.4); });
 $("zoomOut").addEventListener("click", () => { Sound.unlock(); Sound.click(); setZoom(zoom / 1.4); });
 $("zoomReset").addEventListener("click", () => { Sound.unlock(); Sound.click(); setZoom(1); });
