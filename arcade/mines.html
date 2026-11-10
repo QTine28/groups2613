@@ -35,7 +35,9 @@ body {
 .face.lost .x { display: inline; } .face.lost .eyes, .face.lost .smile { display: none; } .face.lost .sad { display: inline; }
 .face.won .glasses { display: inline; }
 .face .sad { display: none; }
-canvas { display: block; border-radius: 10px; touch-action: none; cursor: pointer; }
+canvas { display: block; touch-action: none; cursor: pointer; }
+.view { border-radius: 10px; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #5a4ba0 transparent; margin: 0 auto; }
+.zoom { font-variant-numeric: tabular-nums; min-width: 58px; }
 .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
 .seg { display: inline-flex; background: #15132b; border-radius: 12px; padding: 3px; gap: 3px; }
 .seg button, .tbtn { border: 0; background: transparent; color: var(--muted); font: 600 14px system-ui, sans-serif; padding: 8px 12px; border-radius: 9px; cursor: pointer; }
@@ -79,11 +81,14 @@ canvas { display: block; border-radius: 10px; touch-action: none; cursor: pointe
       </button>
       <div class="led" id="timeLed">000</div>
     </div>
-    <canvas id="field"></canvas>
+    <div class="view" id="view"><canvas id="field"></canvas></div>
   </div>
   <div class="controls">
     <div class="seg" id="levels" role="group" aria-label="Сложность">
       <button data-l="0">Лёгкий</button><button data-l="1">Средний</button><button data-l="2">Профи</button>
+    </div>
+    <div class="seg" role="group" aria-label="Приближение">
+      <button id="zoomOut" title="Отдалить (−)">−</button><button class="zoom" id="zoomReset" title="Сбросить приближение (0)">🔍 1×</button><button id="zoomIn" title="Приблизить (+)">+</button>
     </div>
     <button class="tbtn" id="mode" aria-pressed="false" title="Режим тапа (F)">⛏ Открывать</button>
     <button class="tbtn" id="sound" aria-pressed="true" title="Звук">🔊</button>
@@ -107,6 +112,7 @@ canvas { display: block; border-radius: 10px; touch-action: none; cursor: pointe
       <li>Долгое нажатие / правая кнопка — флажок «здесь мина» (ещё раз — снять)</li>
       <li>Кнопка «⛏ Открывать / 🚩 Флажки» — переключает, что делает обычный тап</li>
       <li>Тап по цифре, вокруг которой уже стоят все её флажки, — открывает остальных соседей разом</li>
+      <li>Щипок двумя пальцами, кнопки «− / +» или Ctrl+колесо — приблизить поле; перетаскивай поле пальцем, чтобы двигать его</li>
       <li>Такопи сверху или клавиша R — новая игра</li>
     </ul>
     <h3>Правила</h3>
@@ -191,7 +197,7 @@ let level = 0, cols, rows, mines, grid, state, started, startTime, endTime, flag
 try { level = Math.min(2, +localStorage.getItem("takopi-mines-level") || 0); } catch (e) {}
 
 const $ = id => document.getElementById(id);
-const cv = $("field"), g = cv.getContext("2d");
+const cv = $("field"), g = cv.getContext("2d"), view = $("view");
 const inside = (c, r) => c >= 0 && r >= 0 && c < cols && r < rows;
 function around(c, r, fn) { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && inside(c + dx, r + dy)) fn(c + dx, r + dy); }
 const bestKey = () => "takopi-mines-best-" + level;
@@ -300,15 +306,34 @@ function setStatus() {
 }
 
 // ---------- размеры и отрисовка ----------
-let cell = 30, cssW = 0, cssH = 0, dpr = 1;
+// зум: поле рисуется крупнее, а окно .view остаётся прежнего размера и прокручивается
+let cell = 30, baseCell = 30, cssW = 0, cssH = 0, dpr = 1, zoom = 1;
+const maxZoom = () => Math.max(1, 60 / baseCell);
 function layout() {
   const availW = Math.min(innerWidth - 48, 1060), availH = innerHeight - 250;
-  cell = Math.max(16, Math.min(44, Math.floor(Math.min(availW / cols, availH / rows))));
+  baseCell = Math.max(16, Math.min(44, Math.floor(Math.min(availW / cols, availH / rows))));
+  zoom = Math.min(zoom, maxZoom());
+  cell = Math.round(baseCell * zoom);
   cssW = cell * cols; cssH = cell * rows;
-  dpr = Math.min(3, window.devicePixelRatio || 1);
+  view.style.width = Math.min(cssW, baseCell * cols) + "px"; view.style.height = Math.min(cssH, baseCell * rows) + "px";
+  // у canvas на телефонах есть предел по площади — при сильном зуме снижаем чёткость
+  dpr = Math.min(3, window.devicePixelRatio || 1, Math.sqrt(12e6 / (cssW * cssH)));
   cv.style.width = cssW + "px"; cv.style.height = cssH + "px";
   cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
+  $("zoomReset").textContent = "🔍 " + (Math.round(zoom * 10) / 10) + "×";
 }
+// приближение вокруг точки (cx, cy) экрана — клетка под пальцем остаётся на месте
+function setZoom(z, cx, cy) {
+  z = Math.max(1, Math.min(maxZoom(), z));
+  if (Math.abs(z - zoom) < 0.01) return;
+  const vr = view.getBoundingClientRect();
+  const px = cx === undefined ? vr.width / 2 : cx - vr.left, py = cy === undefined ? vr.height / 2 : cy - vr.top;
+  const fx = (view.scrollLeft + px) / cell, fy = (view.scrollTop + py) / cell;
+  zoom = z; layout();
+  view.scrollLeft = fx * cell - px; view.scrollTop = fy * cell - py;
+  try { localStorage.setItem("takopi-mines-zoom-" + level, zoom); } catch (e) {}
+}
+function loadZoom() { try { zoom = +localStorage.getItem("takopi-mines-zoom-" + level) || 1; } catch (e) { zoom = 1; } }
 addEventListener("resize", () => { if (!started) newGame(); else layout(); });
 
 function rr(x, y, w, h, r) { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); }
@@ -418,36 +443,77 @@ function cellAt(e) {
   const c = Math.floor((e.clientX - r.left) / cell), row = Math.floor((e.clientY - r.top) / cell);
   return inside(c, row) ? [c, row] : null;
 }
-let longT = null, longDone = false, downAt = null;
+let longT = null, longDone = false, downAt = null, panning = false, pinch = null;
+const pts = new Map();   // активные пальцы: id -> [x, y]
+function cancelPress() { clearTimeout(longT); pressed = null; if (state === "play") $("face").className = "face"; }
+function pinchInfo() {
+  const [a, b] = [...pts.values()];
+  return { d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2 };
+}
 cv.addEventListener("pointerdown", e => {
   Sound.unlock();
+  pts.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pts.size === 2) { cancelPress(); downAt = null; panning = false; pinch = { ...pinchInfo(), z: zoom }; return; }
+  if (pts.size > 2) return;
+  try { cv.setPointerCapture(e.pointerId); } catch (err) {}
   const at = cellAt(e);
+  if (e.button === 2) { if (at && state === "play") toggleFlag(...at); longDone = true; return; }
+  downAt = [e.clientX, e.clientY]; panning = false; longDone = false;
   if (!at || state !== "play") return;
-  if (e.button === 2) { toggleFlag(...at); longDone = true; return; }
-  pressed = at; downAt = [e.clientX, e.clientY]; longDone = false;
-  if (state === "play") $("face").className = "face press";
+  pressed = at;
+  $("face").className = "face press";
   clearTimeout(longT);
   longT = setTimeout(() => { if (pressed) { toggleFlag(...pressed); longDone = true; pressed = null; } }, 380);
 });
 cv.addEventListener("pointermove", e => {
-  hover = cellAt(e);
-  if (downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 10) { clearTimeout(longT); pressed = null; }
+  if (!panning && !pinch) hover = cellAt(e);
+  const prev = pts.get(e.pointerId);
+  if (!prev) return;
+  pts.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pinch && pts.size >= 2) {
+    const p = pinchInfo();
+    setZoom(pinch.z * p.d / pinch.d, p.x, p.y);
+    view.scrollLeft -= p.x - pinch.x; view.scrollTop -= p.y - pinch.y;   // двумя пальцами можно и двигать
+    pinch.x = p.x; pinch.y = p.y;
+    return;
+  }
+  if (!downAt) return;
+  // палец сдвинулся — это перетаскивание поля, а не нажатие на клетку
+  if (!panning && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 10) { panning = true; cancelPress(); hover = null; }
+  if (panning) { view.scrollLeft -= e.clientX - prev[0]; view.scrollTop -= e.clientY - prev[1]; }
 });
 cv.addEventListener("pointerleave", () => { hover = null; });
+// false — жест был щипком, клик по клетке не засчитываем
+function pointerEnd(e) {
+  pts.delete(e.pointerId);
+  if (pinch) { if (pts.size < 2) pinch = null; longDone = true; return false; }
+  return true;
+}
+addEventListener("pointercancel", e => { pointerEnd(e); cancelPress(); downAt = null; panning = false; });
 addEventListener("pointerup", e => {
+  if (!pointerEnd(e)) return;
   clearTimeout(longT);
   if (e.pointerType !== "mouse") hover = null;
   if (state === "play") $("face").className = "face";
-  const at = pressed; pressed = null; downAt = null;
-  if (longDone || !at || e.button === 2) { longDone = false; return; }
+  const at = pressed, wasPan = panning; pressed = null; downAt = null; panning = false;
+  if (longDone || wasPan || !at || e.button === 2) { longDone = false; return; }
   const now = cellAt(e);
   if (!now || now[0] !== at[0] || now[1] !== at[1]) return;
   if (flagMode && !grid[at[1]][at[0]].open) toggleFlag(...at); else reveal(...at);
 });
+cv.addEventListener("wheel", e => {
+  if (!e.ctrlKey) return;   // обычное колесо прокручивает поле, Ctrl+колесо — зум
+  e.preventDefault();
+  setZoom(zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX, e.clientY);
+}, { passive: false });
+$("zoomIn").addEventListener("click", () => { Sound.unlock(); Sound.click(); setZoom(zoom * 1.4); });
+$("zoomOut").addEventListener("click", () => { Sound.unlock(); Sound.click(); setZoom(zoom / 1.4); });
+$("zoomReset").addEventListener("click", () => { Sound.unlock(); Sound.click(); setZoom(1); });
 addEventListener("contextmenu", e => e.preventDefault());
 $("face").addEventListener("click", () => { Sound.unlock(); Sound.click(); newGame(); });
 document.querySelectorAll("#levels button").forEach(b => b.addEventListener("click", () => {
   level = +b.dataset.l; try { localStorage.setItem("takopi-mines-level", level); } catch (e) {}
+  loadZoom();
   Sound.unlock(); Sound.click(); newGame();
 }));
 function setMode(v) { flagMode = v; $("mode").setAttribute("aria-pressed", v); $("mode").textContent = v ? "🚩 Флажки" : "⛏ Открывать"; }
@@ -459,6 +525,9 @@ addEventListener("keydown", e => {
   if (e.code === "KeyR" || e.code === "F2") { Sound.unlock(); newGame(); }
   if (e.code === "KeyF") setMode(!flagMode);
   if (e.code === "KeyM") setSound(!Sound.on);
+  if (e.key === "+" || e.key === "=") setZoom(zoom * 1.4);
+  if (e.key === "-") setZoom(zoom / 1.4);
+  if (e.key === "0") setZoom(1);
 });
 
 function showRules(v) { $("rules").classList.toggle("open", v); }
@@ -467,6 +536,7 @@ $("rules").addEventListener("click", e => { if (e.target.id === "rules" || e.tar
 addEventListener("keydown", e => { if (e.code === "Escape") showRules(false); });
 try { if (!new URLSearchParams(location.search).has("play") && !localStorage.getItem("takopi-rules-seen-mines")) { showRules(true); localStorage.setItem("takopi-rules-seen-mines", "1"); } } catch (e) {}
 
+loadZoom();
 newGame();
 requestAnimationFrame(frame);
 </script>
