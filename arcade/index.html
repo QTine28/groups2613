@@ -23,7 +23,10 @@
     var p = new URLSearchParams(location.search).get("game");
     if (p) target = p;
   }
-  if (target && allowed[String(target).toLowerCase()]) {
+  // mg_<12 hex> — стол Космо-Магната на сервере бота (/magnat); initData едет дальше в location.hash
+  if (target && /^mg_[0-9a-f]{12}$/.test(target)) {
+    location.replace("https://141-147-45-18.sslip.io/magnat/?room=" + target.slice(3) + location.hash);
+  } else if (target && allowed[String(target).toLowerCase()]) {
     location.replace(String(target).toLowerCase() + ".html");
   }
 })();
