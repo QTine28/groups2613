@@ -9,7 +9,7 @@
   --bg1: #15132b; --bg2: #241f4a; --panel: #2c2756; --panel2: #1c1940; --ink: #f4f1ff; --muted: #a9a3d6;
   --pink: #ff7eb6; --pinkD: #d9488f; --led: #ff4d5e; --line: rgba(255, 255, 255, 0.08);
 }
-* { box-sizing: border-box; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; }
 body {
   background: radial-gradient(120% 90% at 50% 0%, var(--bg2), var(--bg1));
@@ -36,7 +36,7 @@ body {
 .face.won .glasses { display: inline; }
 .face .sad { display: none; }
 canvas { display: block; touch-action: none; cursor: pointer; }
-.view { border-radius: 10px; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #5a4ba0 transparent; margin: 0 auto; }
+.view { border-radius: 10px; overflow: hidden; margin: 0 auto; -webkit-touch-callout: none; }
 .zoom { font-variant-numeric: tabular-nums; min-width: 58px; }
 .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
 .seg { display: inline-flex; background: #15132b; border-radius: 12px; padding: 3px; gap: 3px; }
@@ -46,6 +46,14 @@ canvas { display: block; touch-action: none; cursor: pointer; }
 .tbtn[aria-pressed="true"] { background: var(--pinkD); color: #fff; }
 .status { color: var(--muted); font-size: 14px; min-height: 20px; text-align: center; }
 .status b { color: var(--ink); }
+@media (max-width: 560px) {
+  .wrap { padding: 34px 6px 8px; gap: 8px; }
+  .board { padding: 8px; gap: 8px; border-radius: 14px; }
+  .led { min-width: 60px; font-size: 20px; padding: 5px 8px; }
+  .face { width: 46px; height: 46px; } .face svg { width: 36px; height: 36px; }
+  .controls { gap: 6px; }
+  .seg button, .tbtn { padding: 8px 9px; font-size: 13px; }
+}
 .rules { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; padding: 16px;
   background: rgba(8, 6, 24, 0.72); backdrop-filter: blur(4px); }
 .rules.open { display: flex; }
@@ -63,7 +71,7 @@ canvas { display: block; touch-action: none; cursor: pointer; }
 </head>
 <body>
 <a class="back" href="index.html">← игры</a>
-<div class="wrap">
+<div class="wrap" id="wrap">
   <div class="board" id="board">
     <div class="hud">
       <div class="led" id="minesLed">010</div>
@@ -112,7 +120,7 @@ canvas { display: block; touch-action: none; cursor: pointer; }
       <li>Долгое нажатие / правая кнопка — флажок «здесь мина» (ещё раз — снять)</li>
       <li>Кнопка «⛏ Открывать / 🚩 Флажки» — переключает, что делает обычный тап</li>
       <li>Тап по цифре, вокруг которой уже стоят все её флажки, — открывает остальных соседей разом</li>
-      <li>Щипок двумя пальцами, колесо мыши или кнопки «− / +» — приблизить поле; перетаскивай поле пальцем, чтобы двигать его</li>
+      <li>Щипок двумя пальцами, колесо мыши или кнопки «− / +» — приблизить поле; двигай поле пальцем (или двумя пальцами во время щипка)</li>
       <li>Такопи сверху или клавиша R — новая игра</li>
     </ul>
     <h3>Правила</h3>
@@ -306,37 +314,49 @@ function setStatus() {
 }
 
 // ---------- размеры и отрисовка ----------
-// зум: поле рисуется крупнее, а окно .view остаётся прежнего размера и прокручивается
-let cell = 30, baseCell = 30, cssW = 0, cssH = 0, dpr = 1, zoom = 1;
-const maxZoom = () => Math.max(1, 60 / baseCell);
-function layout() {
-  const availW = Math.min(innerWidth - 48, 1060), availH = innerHeight - 250;
-  baseCell = Math.max(16, Math.min(44, Math.floor(Math.min(availW / cols, availH / rows))));
-  zoom = Math.min(zoom, maxZoom());
-  cell = Math.round(baseCell * zoom);
-  cssW = cell * cols; cssH = cell * rows;
-  view.style.width = Math.min(cssW, baseCell * cols) + "px"; view.style.height = Math.min(cssH, baseCell * rows) + "px";
-  // у canvas на телефонах есть предел по площади — при сильном зуме снижаем чёткость
-  dpr = Math.min(3, window.devicePixelRatio || 1, Math.sqrt(12e6 / (cssW * cssH)));
-  cv.style.width = cssW + "px"; cv.style.height = cssH + "px";
-  cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
-  $("zoomReset").textContent = "🔍 " + (Math.round(zoom * 10) / 10) + "×";
+// canvas всегда размером с окно поля; зум и сдвиг — это камера (offX, offY), рисуются только видимые клетки.
+// Буфер canvas не пересоздаётся при зуме — иначе он на кадр пустеет и поле мигает.
+let cell = 30, baseCell = 30, cssW = 0, cssH = 0, dpr = 1, zoom = 1, offX = 0, offY = 0, zoomSaveT = null;
+const maxZoom = () => Math.max(1, 64 / baseCell);
+function clampCam() {
+  offX = Math.max(0, Math.min(cell * cols - cssW, offX));
+  offY = Math.max(0, Math.min(cell * rows - cssH, offY));
 }
-// приближение вокруг точки (cx, cy) экрана — клетка под пальцем остаётся на месте
+function layout() {
+  // сколько места занимает всё, кроме самого поля, — меряем, а не угадываем (на телефоне кнопки переносятся)
+  const narrow = innerWidth < 560;
+  const availW = Math.min(innerWidth - (narrow ? 28 : 48), 1060), availH = innerHeight - ($("wrap").offsetHeight - view.offsetHeight) - 4;
+  baseCell = Math.max(12, Math.min(44, Math.floor(Math.min(availW / cols, availH / rows))));
+  zoom = Math.min(zoom, maxZoom());
+  cell = baseCell * zoom;
+  cssW = baseCell * cols; cssH = baseCell * rows;
+  dpr = Math.min(3, window.devicePixelRatio || 1);
+  const w = Math.round(cssW * dpr), h = Math.round(cssH * dpr);
+  if (cv.width !== w || cv.height !== h) {
+    view.style.width = cv.style.width = cssW + "px"; view.style.height = cv.style.height = cssH + "px";
+    cv.width = w; cv.height = h; sprites.clear();
+  }
+  clampCam(); zoomLabel();
+}
+function zoomLabel() { $("zoomReset").textContent = "🔍 " + (Math.round(zoom * 10) / 10) + "×"; }
+// приближение вокруг точки (cx, cy) экрана — клетка под пальцем/курсором остаётся на месте
 function setZoom(z, cx, cy) {
   z = Math.max(1, Math.min(maxZoom(), z));
-  if (Math.abs(z - zoom) < 0.01) return;
-  const vr = view.getBoundingClientRect();
-  const px = cx === undefined ? vr.width / 2 : cx - vr.left, py = cy === undefined ? vr.height / 2 : cy - vr.top;
-  const fx = (view.scrollLeft + px) / cell, fy = (view.scrollTop + py) / cell;
-  zoom = z; layout();
-  view.scrollLeft = fx * cell - px; view.scrollTop = fy * cell - py;
-  try { localStorage.setItem("takopi-mines-zoom-" + level, zoom); } catch (e) {}
+  if (Math.abs(z - zoom) < 0.001) return;
+  const vr = cv.getBoundingClientRect();
+  const px = cx === undefined ? cssW / 2 : cx - vr.left, py = cy === undefined ? cssH / 2 : cy - vr.top;
+  const fx = (offX + px) / cell, fy = (offY + py) / cell;
+  zoom = z; cell = baseCell * zoom;
+  offX = fx * cell - px; offY = fy * cell - py;
+  clampCam(); zoomLabel();
+  clearTimeout(zoomSaveT);
+  zoomSaveT = setTimeout(() => { try { localStorage.setItem("takopi-mines-zoom-" + level, zoom); } catch (e) {} }, 300);
 }
+function pan(dx, dy) { offX -= dx; offY -= dy; clampCam(); }
 function loadZoom() { try { zoom = +localStorage.getItem("takopi-mines-zoom-" + level) || 1; } catch (e) { zoom = 1; } }
 addEventListener("resize", () => { if (!started) newGame(); else layout(); });
 
-function rr(x, y, w, h, r) { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); }
+function rr(x, px, py, w, h, r) { x.beginPath(); x.roundRect ? x.roundRect(px, py, w, h, r) : x.rect(px, py, w, h); }
 let particles = [], confetti = [], shake = 0, hover = null, pressed = null, last = performance.now();
 function burst(c, r, n, colors) {
   const cx = (c + 0.5) * cell, cy = (r + 0.5) * cell;
@@ -347,13 +367,38 @@ function burst(c, r, n, colors) {
 }
 const ease = t => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
 
-function drawClosed(x, y, s, hot, down) {
+// плитки и цифры рисуются один раз в маленькие canvas-спрайты, дальше только drawImage — градиенты и свечение
+// на сотне клеток каждый кадр сильно грузят телефон
+const sprites = new Map();
+function sprite(key, s, paint) {
+  const px = Math.max(1, Math.round(s * dpr)), k = key + px;
+  let c = sprites.get(k);
+  if (!c) {
+    if (sprites.size > 150) sprites.clear();
+    c = document.createElement("canvas"); c.width = c.height = px;
+    const x = c.getContext("2d"); x.scale(px / s, px / s); paint(x, s);
+    sprites.set(k, c);
+  }
+  return c;
+}
+function paintClosed(x, s, hot, down) {
   const p = Math.max(1, s * 0.05);
-  const grad = g.createLinearGradient(x, y, x, y + s);
+  const grad = x.createLinearGradient(0, 0, 0, s);
   grad.addColorStop(0, down ? "#6a5bb0" : hot ? "#9c8cf0" : "#8a7ae0");
   grad.addColorStop(1, down ? "#5a4ba0" : hot ? "#7a68d6" : "#6a58c4");
-  rr(x + p, y + p, s - 2 * p, s - 2 * p, s * 0.18); g.fillStyle = grad; g.fill();
-  if (!down) { g.fillStyle = "rgba(255,255,255,0.18)"; rr(x + p * 2, y + p * 2, s - 4 * p, s * 0.32, s * 0.14); g.fill(); }
+  rr(x, p, p, s - 2 * p, s - 2 * p, s * 0.18); x.fillStyle = grad; x.fill();
+  if (!down) { x.fillStyle = "rgba(255,255,255,0.18)"; rr(x, p * 2, p * 2, s - 4 * p, s * 0.32, s * 0.14); x.fill(); }
+}
+function drawClosed(px, py, s, hot, down) {
+  g.drawImage(sprite(down ? "d" : hot ? "h" : "c", s, (x, s) => paintClosed(x, s, hot, down)), px, py, s, s);
+}
+function drawNumber(px, py, s, n) {
+  g.drawImage(sprite("n" + n + "-", s, (x, s) => {
+    x.font = `800 ${Math.round(s * 0.6)}px system-ui, "Segoe UI", Roboto, sans-serif`;
+    x.textAlign = "center"; x.textBaseline = "middle"; x.fillStyle = NUM_COLORS[n];
+    x.shadowColor = NUM_COLORS[n]; x.shadowBlur = s * 0.25;
+    x.fillText(n, s / 2, s / 2 + s * 0.04);
+  }), px, py, s, s);
 }
 function drawFlag(x, y, s, t) {
   const k = s / 30, wave = Math.sin(t / 180) * 1.5 * k;
@@ -377,17 +422,21 @@ function drawMine(x, y, s) {
   g.beginPath(); g.arc(cx - r * 0.35, cy - r * 0.35, r * 0.22, 0, Math.PI * 2); g.fillStyle = "rgba(255,255,255,0.8)"; g.fill();
 }
 
+let shownMines = null, shownSecs = null;
 function frame() {
   // время берём из performance.now(), как и при клике, иначе анимации и таймер расходятся
   const now = performance.now();
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.clearRect(0, 0, cssW, cssH);
+  g.fillStyle = "#16132e"; g.fillRect(0, 0, cssW, cssH);
+  g.save();
   if (shake > 0) { shake = Math.max(0, shake - dt * 2.2); g.translate((Math.random() - 0.5) * 14 * shake, (Math.random() - 0.5) * 14 * shake); }
-  g.fillStyle = "#16132e"; g.fillRect(-20, -20, cssW + 40, cssH + 40);
+  g.translate(-offX, -offY);
 
   const s = cell;
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+  const c0 = Math.max(0, Math.floor(offX / s)), c1 = Math.min(cols - 1, Math.floor((offX + cssW) / s));
+  const r0 = Math.max(0, Math.floor(offY / s)), r1 = Math.min(rows - 1, Math.floor((offY + cssH) / s));
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
     const it = grid[r][c], x = c * s, y = r * s;
     const shown = it.open && now >= it.openAt;
     if (!shown) {
@@ -407,108 +456,135 @@ function frame() {
       const k = ease((now - it.openAt) / 160);
       const boom = boomCell && boomCell[0] === c && boomCell[1] === r;
       g.fillStyle = boom ? "#ff4d5e" : it.mine ? "#3a2440" : (c + r) % 2 ? "#26224a" : "#2a2650";
-      g.fillRect(x, y, s, s);
+      g.fillRect(x, y, s + 0.5, s + 0.5);   // +0.5 — без щелей между клетками при дробном размере
       g.strokeStyle = "rgba(255,255,255,0.05)"; g.lineWidth = 1; g.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
-      g.save(); g.globalAlpha = k; g.translate(x + s / 2, y + s / 2); g.scale(0.6 + 0.4 * k, 0.6 + 0.4 * k); g.translate(-x - s / 2, -y - s / 2);
+      if (k < 1) { g.save(); g.globalAlpha = k; g.translate(x + s / 2, y + s / 2); g.scale(0.6 + 0.4 * k, 0.6 + 0.4 * k); g.translate(-x - s / 2, -y - s / 2); }
       if (it.mine) drawMine(x, y, s);
-      else if (it.n) {
-        g.font = `800 ${Math.round(s * 0.6)}px system-ui, "Segoe UI", Roboto, sans-serif`;
-        g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = NUM_COLORS[it.n];
-        g.shadowColor = NUM_COLORS[it.n]; g.shadowBlur = s * 0.25;
-        g.fillText(it.n, x + s / 2, y + s / 2 + s * 0.04);
-        g.shadowBlur = 0;
+      else if (it.n) drawNumber(x, y, s, it.n);
+      if (k < 1) {
+        g.restore();
+        // «отпечаток» закрытой плитки исчезает поверх — плавное открытие
+        g.globalAlpha = 1 - k; drawClosed(x, y, s, false, true); g.globalAlpha = 1;
       }
-      g.restore();
-      // «отпечаток» закрытой плитки исчезает поверх — плавное открытие
-      if (k < 1) { g.globalAlpha = 1 - k; drawClosed(x, y, s, false, true); g.globalAlpha = 1; }
     }
   }
   particles.forEach(p => { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 300 * dt; p.vx *= 0.98; });
   particles = particles.filter(p => p.t < p.life);
   particles.forEach(p => { g.globalAlpha = 1 - p.t / p.life; g.fillStyle = p.c; g.beginPath(); g.arc(p.x, p.y, p.s, 0, Math.PI * 2); g.fill(); });
+  g.restore();
   confetti.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt; });
   confetti = confetti.filter(p => p.y < cssH + 20);
   confetti.forEach(p => { g.globalAlpha = 1; g.save(); g.translate(p.x, p.y); g.rotate(p.r); g.fillStyle = p.c; g.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); g.restore(); });
   g.globalAlpha = 1;
+  // полоски-подсказки, какая часть поля сейчас видна
+  const tw = cell * cols, th = cell * rows;
+  g.fillStyle = "rgba(255,255,255,0.35)";
+  if (tw > cssW + 1) { rr(g, offX / tw * cssW, cssH - 4, cssW * cssW / tw, 3, 1.5); g.fill(); }
+  if (th > cssH + 1) { rr(g, cssW - 4, offY / th * cssH, 3, cssH * cssH / th, 1.5); g.fill(); }
 
-  $("minesLed").textContent = String(Math.max(-99, mines - flags)).padStart(3, "0");
-  const secs = started ? Math.max(0, Math.floor(((state === "play" ? now : endTime) - startTime) / 1000)) : 0;
-  $("timeLed").textContent = String(Math.min(999, secs)).padStart(3, "0");
+  // DOM трогаем только когда цифры реально поменялись
+  const m = mines - flags, secs = started ? Math.min(999, Math.max(0, Math.floor(((state === "play" ? now : endTime) - startTime) / 1000))) : 0;
+  if (m !== shownMines) { shownMines = m; $("minesLed").textContent = String(Math.max(-99, m)).padStart(3, "0"); }
+  if (secs !== shownSecs) { shownSecs = secs; $("timeLed").textContent = String(secs).padStart(3, "0"); }
   requestAnimationFrame(frame);
 }
 
 // ---------- ввод ----------
-function cellAt(e) {
+// мышь — через pointer-события, пальцы — через touch-события (в мобильных WebView они надёжнее для щипка)
+function cellAt(x, y) {
   const r = cv.getBoundingClientRect();
-  const c = Math.floor((e.clientX - r.left) / cell), row = Math.floor((e.clientY - r.top) / cell);
+  const c = Math.floor((x - r.left + offX) / cell), row = Math.floor((y - r.top + offY) / cell);
   return inside(c, row) ? [c, row] : null;
 }
-let longT = null, longDone = false, downAt = null, panning = false, pinch = null;
-const pts = new Map();   // активные пальцы: id -> [x, y]
+let longT = null, longDone = false, downAt = null, lastAt = null, panning = false, pinch = null;
 function cancelPress() { clearTimeout(longT); pressed = null; if (state === "play") $("face").className = "face"; }
-function pinchInfo() {
-  const [a, b] = [...pts.values()];
-  return { d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2 };
-}
-cv.addEventListener("pointerdown", e => {
-  Sound.unlock();
-  pts.set(e.pointerId, [e.clientX, e.clientY]);
-  if (pts.size === 2) { cancelPress(); downAt = null; panning = false; pinch = { ...pinchInfo(), z: zoom }; return; }
-  if (pts.size > 2) return;
-  try { cv.setPointerCapture(e.pointerId); } catch (err) {}
-  const at = cellAt(e);
-  if (e.button === 2) { if (at && state === "play") toggleFlag(...at); longDone = true; return; }
-  downAt = [e.clientX, e.clientY]; panning = false; longDone = false;
+function press(x, y) {
+  downAt = lastAt = [x, y]; panning = false; longDone = false;
+  const at = cellAt(x, y);
   if (!at || state !== "play") return;
+  const it = grid[at[1]][at[0]];
+  if (it.open && !it.n) return;   // пустая открытая клетка: нажимать нечего — ничего не подсвечиваем
   pressed = at;
-  $("face").className = "face press";
   clearTimeout(longT);
-  longT = setTimeout(() => { if (pressed) { toggleFlag(...pressed); longDone = true; pressed = null; } }, 380);
+  if (it.open) return;   // цифра: тап открывает соседей, долгое нажатие ничего не делает
+  $("face").className = "face press";
+  longT = setTimeout(() => { if (pressed) { toggleFlag(...pressed); longDone = true; cancelPress(); } }, 380);
+}
+function drag(x, y) {
+  if (!downAt) return;
+  // палец сдвинулся — это перетаскивание поля, а не нажатие на клетку
+  if (!panning && Math.hypot(x - downAt[0], y - downAt[1]) > 10) { panning = true; cancelPress(); hover = null; }
+  if (panning) pan(x - lastAt[0], y - lastAt[1]);
+  lastAt = [x, y];
+}
+function release(x, y) {
+  clearTimeout(longT);
+  if (state === "play") $("face").className = "face";
+  const at = pressed, wasPan = panning; pressed = null; downAt = null; panning = false;
+  if (longDone || wasPan || !at) { longDone = false; return; }
+  const now = cellAt(x, y);
+  if (!now || now[0] !== at[0] || now[1] !== at[1]) return;
+  if (flagMode && !grid[at[1]][at[0]].open) toggleFlag(...at); else reveal(...at);
+}
+
+cv.addEventListener("pointerdown", e => {
+  if (e.pointerType === "touch") return;
+  Sound.unlock();
+  if (e.button === 2) { const at = cellAt(e.clientX, e.clientY); if (at && state === "play") toggleFlag(...at); return; }
+  if (e.button !== 0) return;
+  try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+  press(e.clientX, e.clientY);
 });
 cv.addEventListener("pointermove", e => {
-  if (!panning && !pinch) hover = cellAt(e);
-  const prev = pts.get(e.pointerId);
-  if (!prev) return;
-  pts.set(e.pointerId, [e.clientX, e.clientY]);
-  if (pinch && pts.size >= 2) {
-    const p = pinchInfo();
+  if (e.pointerType === "touch") return;
+  if (!panning) hover = cellAt(e.clientX, e.clientY);
+  drag(e.clientX, e.clientY);
+});
+cv.addEventListener("pointerleave", () => { hover = null; });
+cv.addEventListener("pointerup", e => { if (e.pointerType !== "touch" && e.button === 0) release(e.clientX, e.clientY); });
+cv.addEventListener("pointercancel", e => { if (e.pointerType !== "touch") { cancelPress(); downAt = null; panning = false; } });
+
+const twoFingers = t => {
+  const a = t[0], b = t[1];
+  return { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1, x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
+};
+cv.addEventListener("touchstart", e => {
+  e.preventDefault();
+  if (e.touches.length >= 2) { cancelPress(); downAt = null; panning = false; pinch = { ...twoFingers(e.touches), z: zoom }; return; }
+  if (!pinch) { const t = e.touches[0]; press(t.clientX, t.clientY); }
+}, { passive: false });
+cv.addEventListener("touchmove", e => {
+  e.preventDefault();
+  if (pinch && e.touches.length >= 2) {   // щипок: зум к середине между пальцами, и заодно сдвиг поля
+    const p = twoFingers(e.touches);
     setZoom(pinch.z * p.d / pinch.d, p.x, p.y);
-    view.scrollLeft -= p.x - pinch.x; view.scrollTop -= p.y - pinch.y;   // двумя пальцами можно и двигать
+    pan(p.x - pinch.x, p.y - pinch.y);
     pinch.x = p.x; pinch.y = p.y;
     return;
   }
-  if (!downAt) return;
-  // палец сдвинулся — это перетаскивание поля, а не нажатие на клетку
-  if (!panning && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 10) { panning = true; cancelPress(); hover = null; }
-  if (panning) { view.scrollLeft -= e.clientX - prev[0]; view.scrollTop -= e.clientY - prev[1]; }
-});
-cv.addEventListener("pointerleave", () => { hover = null; });
-// false — жест был щипком, клик по клетке не засчитываем
-function pointerEnd(e) {
-  pts.delete(e.pointerId);
-  if (pinch) { if (pts.size < 2) pinch = null; longDone = true; return false; }
-  return true;
-}
-addEventListener("pointercancel", e => { pointerEnd(e); cancelPress(); downAt = null; panning = false; });
-addEventListener("pointerup", e => {
-  if (!pointerEnd(e)) return;
-  clearTimeout(longT);
-  if (e.pointerType !== "mouse") hover = null;
-  if (state === "play") $("face").className = "face";
-  const at = pressed, wasPan = panning; pressed = null; downAt = null; panning = false;
-  if (longDone || wasPan || !at || e.button === 2) { longDone = false; return; }
-  const now = cellAt(e);
-  if (!now || now[0] !== at[0] || now[1] !== at[1]) return;
-  if (flagMode && !grid[at[1]][at[0]].open) toggleFlag(...at); else reveal(...at);
-});
+  const t = e.touches[0];
+  if (t) drag(t.clientX, t.clientY);
+}, { passive: false });
+cv.addEventListener("touchend", e => {
+  e.preventDefault(); Sound.unlock();   // iOS разрешает звук только из touchend
+  if (pinch) {
+    if (e.touches.length < 2) pinch = null;
+    // оставшийся после щипка палец только двигает поле, клетку не открывает
+    if (e.touches.length === 1) { const t = e.touches[0]; downAt = lastAt = [t.clientX, t.clientY]; panning = true; }
+    return;
+  }
+  if (e.touches.length) return;
+  const t = e.changedTouches[0];
+  release(t.clientX, t.clientY);
+}, { passive: false });
+cv.addEventListener("touchcancel", () => { pinch = null; cancelPress(); downAt = null; panning = false; });
 cv.addEventListener("wheel", e => {
   // колесо над полем — зум к курсору; плавно и для тачпада, и для мыши (deltaMode 1 — строки)
   e.preventDefault();
   const dy = Math.max(-120, Math.min(120, e.deltaY * (e.deltaMode === 1 ? 40 : 1)));
   setZoom(zoom * Math.exp(-dy * 0.002), e.clientX, e.clientY);
 }, { passive: false });
-// iOS/Telegram: не отдаём жесты пальцами странице и окну мини-аппа, иначе щипок масштабирует/сворачивает их
-cv.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
+// iOS: не даём странице масштабироваться целиком
 ["gesturestart", "gesturechange"].forEach(t => document.addEventListener(t, e => e.preventDefault()));
 try {
   const TG = window.Telegram && window.Telegram.WebApp;
